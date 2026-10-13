@@ -1,0 +1,6 @@
+{
+  "name": "Compinance",
+  "description": "Student Loaning Backend & Mobile Money Platform powered by PawaPay, Gemini AI KYC Verification, and Firestore",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
