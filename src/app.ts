@@ -38,6 +38,16 @@ import { handlePawaPayWebhook } from './endpoints/loans/webhook';
 import { handleGetLoanInventory } from './endpoints/loans/inventory';
 import { handleAssignCollection } from './endpoints/loans/assign-collection';
 
+// PawaPay Official Webhooks Suite
+import {
+  handlePawaPayDepositWebhook,
+  handlePawaPayPayoutWebhook,
+  handlePawaPayRefundWebhook,
+  handlePawaPayFloatWebhook,
+  handleGetPawaPayWebhookHistory,
+} from './endpoints/webhooks/pawapay';
+
+import { cosmosService } from './connectors/cosmos';
 import { handleGetDocsHtml, handleGetDocsSpec } from './endpoints/docs';
 
 export const app = new Hono();
@@ -46,13 +56,14 @@ app.use('*', cors({ origin: (o) => o || '*', credentials: true }));
 app.use('*', geoFencingMiddleware);
 app.use('*', auditLoggerMiddleware);
 
-// Open Documentation
+// Open Documentation & API Spec
 app.get('/doc', handleGetDocsHtml);
 app.get('/doc/spec', handleGetDocsSpec);
 app.get('/docs', handleGetDocsHtml);
 app.get('/docs/spec', handleGetDocsSpec);
 app.get('/api/docs/spec', handleGetDocsSpec);
-app.get('/health', (c) => c.json({ status: 'UP', service: 'Compinance Core Backend', timestamp: Date.now() }));
+app.get('/health', (c) => c.json({ status: 'UP', service: 'Compinance Core Backend', database: 'Azure Cosmos DB', timestamp: Date.now() }));
+app.get('/api/system/cosmos-status', (c) => c.json({ success: true, cosmos: cosmosService.getStatus() }));
 
 // Auth Routes (Rate Limited)
 app.use('/api/auth/*', authRateLimiter);
@@ -86,6 +97,15 @@ app.post('/api/loans/apply', authMiddleware, handleApplyLoan);
 app.get('/api/loans/list', authMiddleware, handleListLoans);
 app.post('/api/loans/approve', authMiddleware, requireStaffRole(), handleApproveLoan);
 app.post('/api/loans/repay', authMiddleware, handleRepayLoan);
-app.post('/api/loans/webhook', handlePawaPayWebhook); // PawaPay asynchronous webhook
 app.get('/api/loans/inventory', authMiddleware, requireStaffRole(), handleGetLoanInventory);
 app.post('/api/loans/assign-collection', authMiddleware, requireStaffRole('ceo'), handleAssignCollection);
+
+// PawaPay Official 4 Webhooks + History
+app.post('/api/webhooks/pawapay/deposits', handlePawaPayDepositWebhook);
+app.post('/api/webhooks/pawapay/payouts', handlePawaPayPayoutWebhook);
+app.post('/api/webhooks/pawapay/refunds', handlePawaPayRefundWebhook);
+app.post('/api/webhooks/pawapay/float-notifications', handlePawaPayFloatWebhook);
+app.get('/api/webhooks/pawapay/history', authMiddleware, requireStaffRole(), handleGetPawaPayWebhookHistory);
+
+// Backward-compatible general webhook
+app.post('/api/loans/webhook', handlePawaPayWebhook);

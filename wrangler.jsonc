@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "compinance-fintech-workers",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "single-page-application",
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    "COSMOS_DATABASE_ID": "compinance-db",
+    "ENFORCE_KENYA_GEO": "false",
+    "COMPANY_FLOAT_MIN_RESERVE_KES": "50000"
+  }
+}

@@ -21,8 +21,11 @@ export interface Loan {
   approvedByStaffId?: string;
   approvedAt?: number;
   disbursedAt?: number;
+  lastPaymentAt?: number;
   pawapayPayoutId?: string;
   pawapayDepositId?: string;
+  financialTransactionId?: string;
+  rejectionReason?: string;
   amountPaid: number;
   assignedCollectorId?: string;
   assignedByStaffId?: string;
