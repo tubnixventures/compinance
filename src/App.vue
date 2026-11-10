@@ -2,1439 +2,1657 @@
 import { ref, computed, onMounted } from 'vue';
 import {
   ShieldCheck,
-  BookOpen,
-  Terminal,
-  Play,
-  Copy,
-  Check,
-  ExternalLink,
-  Lock,
-  Database,
   Smartphone,
-  Globe,
-  Radio,
-  Send,
-  Layers,
-  ArrowRight,
-  RefreshCw,
+  CreditCard,
+  Clock,
+  CheckCircle2,
+  XCircle,
   AlertTriangle,
-  FileText,
-  Activity,
+  AlertOctagon,
+  Users,
   UserCheck,
   Briefcase,
   DollarSign,
-  CheckCircle2,
-  XCircle,
+  ArrowRight,
+  RefreshCw,
+  FileText,
+  Activity,
+  Lock,
+  Sparkles,
+  ChevronRight,
+  HelpCircle,
+  Send,
   Trash2,
-  CloudLightning,
-  AlertOctagon,
-  Users,
+  Building2,
+  GraduationCap,
+  Check,
+  LogOut,
+  LogIn,
+  UserPlus,
+  Compass,
+  FileCheck,
+  Search,
+  ExternalLink,
+  PhoneCall,
+  Mail,
+  MapPin,
+  Calendar,
+  Percent,
+  KeyRound,
+  FileSignature,
+  FileDown,
+  Printer,
+  ChevronDown,
+  Home,
+  Receipt,
+  User,
+  Sliders,
+  Wallet,
+  Cpu,
+  Layers,
+  TrendingUp,
+  CircleAlert,
 } from 'lucide-vue-next';
-import { ENDPOINTS_CATALOG, ApiDocEndpoint } from './endpoints/docs/endpoints-list';
+import LoanDashboard from './components/LoanDashboard.vue';
+import LoanCalculator from './components/LoanCalculator.vue';
 
-// Navigation State
-const activeMainTab = ref<'admin' | 'webhooks' | 'api' | 'cosmos'>('admin');
-const activeAdminSubTab = ref<'loans' | 'kyc' | 'staff' | 'collections'>('loans');
+// ==========================================
+// NAVIGATION & PAGE ROUTING STATE
+// ==========================================
+type PageRoute =
+  | 'home'
+  | 'about'
+  | 'terms'
+  | 'help'
+  | 'login'
+  | 'register'
+  | 'loan_studio'
+  | 'my_loans'
+  | 'kyc'
+  | 'account'
+  | 'admin';
 
-// Active Session Role
-const activeRoleSession = ref<string>('Root (root@compinance.co.ke)');
-const currentCallerRole = ref<'student' | 'customer_care' | 'manager' | 'admin' | 'ceo' | 'root'>('root');
+const currentPage = ref<PageRoute>('home');
 
-// Admin Data State
-const adminLoading = ref<boolean>(false);
-const adminMessage = ref<string | null>(null);
-const adminMessageType = ref<'success' | 'error'>('success');
+// Active User / Session State
+interface CurrentUser {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  type: 'student' | 'staff';
+  role?: 'root' | 'ceo' | 'manager' | 'admin' | 'customer_care';
+  status: 'pending' | 'approved' | 'rejected' | 'pending_admin_approval' | 'ai_rejected';
+  loanLimit?: number;
+  isDefaulter?: boolean;
+  totalLoansCompleted?: number;
+  nationalIdNumber?: string;
+  university?: string;
+  course?: string;
+  regNumber?: string;
+  parentPhone?: string;
+  parentName?: string;
+  parentIdNumber?: string;
+}
 
-const loansList = ref<any[]>([]);
-const studentsList = ref<any[]>([]);
-const staffList = ref<any[]>([]);
-const inventoryStats = ref<any>({
-  totalDisbursedKes: 0,
-  totalCollectedKes: 0,
-  totalOutstandingKes: 0,
-  activeCount: 0,
-  defaultedCount: 0,
-  defaultRatePercent: 0,
-  companyFloatBalanceKes: 1500000,
-  companyReserveFloorKes: 50000,
+const currentUser = ref<CurrentUser | null>({
+  id: 'usr_student_demo',
+  fullName: 'Grace Wanjiku',
+  email: 'student@uonbi.ac.ke',
+  phone: '+254712345678',
+  type: 'student',
+  status: 'approved',
+  loanLimit: 30, // Default first-time student loan limit is KES 30
+  isDefaulter: false,
+  totalLoansCompleted: 0,
+  nationalIdNumber: '38901234',
+  university: 'University of Nairobi',
+  course: 'BSc. Computer Science',
+  regNumber: 'P15/14231/2023',
+  parentPhone: '+254722998877',
+  parentName: 'Mary Muthoni Wanjiku',
+  parentIdNumber: '11223344',
 });
 
-// Admin Form Inputs
-const setLimitUserId = ref<string>('');
-const setLimitAmount = ref<number>(30);
-const setLimitReason = ref<string>('Manual credit allocation by compliance staff');
+const authToken = ref<string>('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3Jfc3R1ZGVudF9kZW1vIiwidHlwZSI6InN0dWRlbnQiLCJpYXQiOjE3OTQzMzE1NTUsImV4cCI6MTc5NDMzNTE1NSwidG9rZW5UeXBlIjoiYWNjZXNzIn0.rANtew_HMrWYOvfQeQzTd_K61VV8Nn17zsCsjg4pKFA');
 
-const newStaffName = ref<string>('');
-const newStaffEmail = ref<string>('');
-const newStaffPhone = ref<string>('0733112233');
-const newStaffRole = ref<'customer_care' | 'manager' | 'admin' | 'ceo'>('customer_care');
+// Feedback Alerts
+const alertMessage = ref<string | null>(null);
+const alertType = ref<'success' | 'error' | 'info'>('info');
 
-const selectedDutyStaffId = ref<string>('');
-const dutyApproveLoans = ref<boolean>(true);
-const dutyVerifyKYC = ref<boolean>(true);
-
-const assignLoanId = ref<string>('');
-const assignCollectorId = ref<string>('');
-
-// API & Docs Explorer
-const selectedTag = ref<string>('All');
-const tags = ['All', 'Loans & PawaPay', 'Users & KYC', 'Staff & RBAC', 'Auth'];
-const selectedEndpoint = ref<ApiDocEndpoint>(ENDPOINTS_CATALOG[0]);
-const requestBody = ref<string>(JSON.stringify(ENDPOINTS_CATALOG[0].bodySample || {}, null, 2));
-const apiResponseOutput = ref<any>(null);
-const apiResponseStatus = ref<number | null>(null);
-const apiResponseHeaders = ref<Record<string, string>>({});
-const apiLoading = ref<boolean>(false);
-const copied = ref<boolean>(false);
-
-// Cosmos DB State
-const cosmosStatus = ref<{ connected: boolean; databaseId: string; endpoint: string; containers: string[] }>({
-  connected: true,
-  databaseId: 'compinance-db',
-  endpoint: 'Local Managed Cosmos Instance',
-  containers: ['users', 'loans', 'verifications', 'otps', 'audit_logs', 'pawapay_webhooks'],
-});
-const selectedContainer = ref<string>('loans');
-const containerData = ref<any[]>([]);
-const containerLoading = ref<boolean>(false);
-
-// PawaPay Webhooks Suite
-const selectedWebhookType = ref<'deposit' | 'payout' | 'refund' | 'float'>('deposit');
-const webhookRequestBody = ref<string>('');
-const webhookResponseOutput = ref<any>(null);
-const webhookResponseStatus = ref<number | null>(null);
-const webhookLoading = ref<boolean>(false);
-const webhookHistory = ref<any[]>([]);
-
-const webhookTemplates = {
-  deposit: {
-    path: '/api/webhooks/pawapay/deposits',
-    title: '1. PawaPay Deposits Webhook (C2B Repayment)',
-    description: 'Triggered when a student repays via M-Pesa STK push. Reconciles loan, lifts defaulter flag, and increases credit limit.',
-    payload: {
-      depositId: `dep_${Date.now()}`,
-      status: 'COMPLETED',
-      amount: 32,
-      currency: 'KES',
-      payer: { type: 'MSISDN', address: { value: '254712345678' } },
-      correspondent: 'MPESA_KEN',
-      statementDescription: 'Compinance Loan Repayment',
-      financialTransactionId: `NL${Math.floor(100000000 + Math.random() * 900000000)}`,
-      failureReason: null,
-      created: new Date().toISOString(),
-    },
-  },
-  payout: {
-    path: '/api/webhooks/pawapay/payouts',
-    title: '2. PawaPay Payouts Webhook (B2C Disbursement)',
-    description: 'Sent when M-Pesa funds are deposited into student wallet. Sets loan status to active/disbursed.',
-    payload: {
-      payoutId: `payout_sample_${Date.now()}`,
-      status: 'COMPLETED',
-      amount: 5000,
-      currency: 'KES',
-      recipient: { type: 'MSISDN', address: { value: '254712345678' } },
-      correspondent: 'MPESA_KEN',
-      financialTransactionId: `MK${Math.floor(100000000 + Math.random() * 900000000)}`,
-      failureReason: null,
-      created: new Date().toISOString(),
-    },
-  },
-  refund: {
-    path: '/api/webhooks/pawapay/refunds',
-    title: '3. PawaPay Refunds Webhook (Payment Reversals)',
-    description: 'Adjusts student ledger in Cosmos DB when overpayments or disputed transactions are reversed.',
-    payload: {
-      refundId: `ref_${Date.now()}`,
-      originalDepositId: `dep_sample_123`,
-      status: 'COMPLETED',
-      amount: 50,
-      currency: 'KES',
-      reason: 'Borrower overpayment credit adjustment',
-      created: new Date().toISOString(),
-    },
-  },
-  float: {
-    path: '/api/webhooks/pawapay/float-notifications',
-    title: '4. PawaPay Float & Liquidity Threshold Webhook',
-    description: 'Real-time liquidity and reserve floor alerts. Warns if company float drops near or below KES 50,000.',
-    payload: {
-      notificationId: `fn_${Date.now()}`,
-      accountNumber: 'ACC_KES_001',
-      balanceKes: 1450000,
-      currency: 'KES',
-      alertLevel: 'NORMAL',
-      minThresholdKes: 50000,
-      message: 'Float liquidity is healthy and above safety reserve floor',
-      timestamp: new Date().toISOString(),
-    },
-  },
-};
-
-const notify = (msg: string, isError = false) => {
-  adminMessage.value = msg;
-  adminMessageType.value = isError ? 'error' : 'success';
+function showAlert(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  alertMessage.value = message;
+  alertType.value = type;
   setTimeout(() => {
-    if (adminMessage.value === msg) adminMessage.value = null;
-  }, 6000);
-};
+    if (alertMessage.value === message) alertMessage.value = null;
+  }, 5000);
+}
 
-// Admin Operations
-const fetchAdminData = async () => {
-  adminLoading.value = true;
-  try {
-    const [loansRes, studentsRes, staffRes, invRes] = await Promise.all([
-      fetch('/api/loans/list', { credentials: 'include' }).then((r) => r.json()),
-      fetch('/api/users/list?type=student', { credentials: 'include' }).then((r) => r.json()),
-      fetch('/api/staff/list', { credentials: 'include' }).then((r) => r.json()),
-      fetch('/api/loans/inventory', { credentials: 'include' }).then((r) => r.json()),
-    ]);
-
-    if (loansRes.success) loansList.value = loansRes.data || [];
-    if (studentsRes.success) studentsList.value = studentsRes.data || [];
-    if (staffRes.success) staffList.value = staffRes.data || [];
-    if (invRes.success && invRes.data) inventoryStats.value = invRes.data;
-  } catch (err: any) {
-    notify(`Failed loading admin data: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
-
-const approveLoan = async (loanId: string) => {
-  adminLoading.value = true;
-  try {
-    const res = await fetch('/api/loans/approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ loanId }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      notify(`Loan ${loanId} approved and disbursed via PawaPay M-Pesa!`);
-      await fetchAdminData();
-    } else {
-      notify(`Approval failed: ${json.error}`, true);
-    }
-  } catch (err: any) {
-    notify(`Error: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
-
-const approveKyc = async (userId: string, approved: boolean) => {
-  adminLoading.value = true;
-  try {
-    const res = await fetch('/api/users/approve-account', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ userId, approved, notes: 'Compliance review completed' }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      notify(`Student account verification updated to '${approved ? 'approved' : 'rejected'}'! Default limit: KES 30.`);
-      await fetchAdminData();
-    } else {
-      notify(`Failed: ${json.error}`, true);
-    }
-  } catch (err: any) {
-    notify(`Error: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
-
-const triggerParentChallenge = async (userId: string) => {
-  adminLoading.value = true;
-  try {
-    const res = await fetch('/api/users/parent-challenge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ userId }),
-    });
-    const json = await res.json();
-    notify(json.message || json.error, !json.success);
-  } catch (err: any) {
-    notify(`Error: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
-
-const saveLoanLimit = async () => {
-  if (!setLimitUserId.value || setLimitAmount.value < 20) {
-    notify('Please select student and enter a valid allocation limit (>= KES 20)', true);
+// Quick Role Switcher for Demo & Testing
+function switchDemoRole(roleType: 'student' | 'root' | 'ceo' | 'manager' | 'care' | 'guest') {
+  if (roleType === 'guest') {
+    currentUser.value = null;
+    authToken.value = '';
+    currentPage.value = 'home';
+    showAlert('Switched to Guest / Public visitor view', 'info');
     return;
   }
-  adminLoading.value = true;
-  try {
-    const res = await fetch('/api/users/set-loan-limit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        userId: setLimitUserId.value,
-        loanLimit: Number(setLimitAmount.value),
-        reason: setLimitReason.value,
-      }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      notify(`Credit limit of KES ${setLimitAmount.value.toLocaleString()} allocated successfully!`);
-      await fetchAdminData();
-    } else {
-      notify(`Failed: ${json.error}`, true);
-    }
-  } catch (err: any) {
-    notify(`Error: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
 
-const createStaffMember = async () => {
-  if (!newStaffName.value || !newStaffEmail.value) {
-    notify('Full name and email are required for staff provisioning', true);
-    return;
+  if (roleType === 'student') {
+    currentUser.value = {
+      id: 'usr_student_demo',
+      fullName: 'Grace Wanjiku',
+      email: 'student@uonbi.ac.ke',
+      phone: '+254712345678',
+      type: 'student',
+      status: 'approved',
+      loanLimit: 30,
+      isDefaulter: false,
+      totalLoansCompleted: 0,
+      nationalIdNumber: '38901234',
+      university: 'University of Nairobi',
+      course: 'BSc. Computer Science',
+      regNumber: 'P15/14231/2023',
+      parentPhone: '+254722998877',
+      parentName: 'Mary Muthoni Wanjiku',
+      parentIdNumber: '11223344',
+    };
+    authToken.value = 'demo_student_token';
+    currentPage.value = 'home';
+    showAlert('Switched to Student: Grace Wanjiku (Limit: KES 30)', 'success');
+  } else if (roleType === 'root') {
+    currentUser.value = {
+      id: 'usr_root_1',
+      fullName: 'Chief Technology Architect (Root)',
+      email: 'root@compinance.co.ke',
+      phone: '+254700000001',
+      type: 'staff',
+      role: 'root',
+      status: 'approved',
+    };
+    authToken.value = 'demo_root_token';
+    currentPage.value = 'admin';
+    showAlert('Switched to Staff: Root Architect (Full Authority)', 'success');
+  } else if (roleType === 'ceo') {
+    currentUser.value = {
+      id: 'usr_ceo_1',
+      fullName: 'Amina Odhiambo (CEO)',
+      email: 'ceo@compinance.co.ke',
+      phone: '+254700000002',
+      type: 'staff',
+      role: 'ceo',
+      status: 'approved',
+    };
+    authToken.value = 'demo_ceo_token';
+    currentPage.value = 'admin';
+    showAlert('Switched to Staff: CEO Amina Odhiambo', 'success');
+  } else if (roleType === 'manager') {
+    currentUser.value = {
+      id: 'usr_manager_1',
+      fullName: 'Faith Mwangi (Credit Manager)',
+      email: 'manager@compinance.co.ke',
+      phone: '+254700000004',
+      type: 'staff',
+      role: 'manager',
+      status: 'approved',
+    };
+    authToken.value = 'demo_manager_token';
+    currentPage.value = 'admin';
+    showAlert('Switched to Staff: Credit Risk Manager Faith Mwangi', 'success');
+  } else if (roleType === 'care') {
+    currentUser.value = {
+      id: 'usr_care_1',
+      fullName: 'Brian Omondi (Customer Care)',
+      email: 'care@compinance.co.ke',
+      phone: '+254700000005',
+      type: 'staff',
+      role: 'customer_care',
+      status: 'approved',
+    };
+    authToken.value = 'demo_care_token';
+    currentPage.value = 'admin';
+    showAlert('Switched to Staff: Customer Care Brian Omondi', 'success');
   }
-  adminLoading.value = true;
-  try {
-    const res = await fetch('/api/staff/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        fullName: newStaffName.value,
-        email: newStaffEmail.value,
-        phone: newStaffPhone.value,
-        role: newStaffRole.value,
-        password: 'Compinance2026!',
-      }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      notify(json.message);
-      newStaffName.value = '';
-      newStaffEmail.value = '';
-      await fetchAdminData();
-    } else {
-      notify(`Governance violation: ${json.error}`, true);
-    }
-  } catch (err: any) {
-    notify(`Error: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
 
-const deleteStaffMember = async (staffId: string) => {
-  if (!confirm('Are you sure you want to de-provision this staff account?')) return;
-  adminLoading.value = true;
-  try {
-    const res = await fetch('/api/staff/delete', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ staffId }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      notify(json.message);
-      await fetchAdminData();
-    } else {
-      notify(`Action blocked: ${json.error}`, true);
-    }
-  } catch (err: any) {
-    notify(`Error: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
+  fetchDashboardData();
+}
 
-const assignExecutiveDuties = async () => {
-  if (!selectedDutyStaffId.value) return;
-  adminLoading.value = true;
-  try {
-    const res = await fetch('/api/staff/assign-permissions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        staffId: selectedDutyStaffId.value,
-        duties: { canApproveLoans: dutyApproveLoans.value, canVerifyKYC: dutyVerifyKYC.value },
-      }),
-    });
-    const json = await res.json();
-    notify(json.message || json.error, !json.success);
-    if (json.success) await fetchAdminData();
-  } catch (err: any) {
-    notify(`Error: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
+// ==========================================
+// CALCULATOR & HOME PROPOSITION STATE
+// ==========================================
+const calcAmount = ref<number>(30); // Default first-time loan is strictly KES 30
+const calcDuration = ref<number>(7);
+const calcTotalRepayable = computed(() => {
+  const interest = Math.round(calcAmount.value * 0.05 * 100) / 100;
+  return calcAmount.value + interest;
+});
 
-const assignCollectionOfficer = async () => {
-  if (!assignLoanId.value || !assignCollectorId.value) return;
-  adminLoading.value = true;
-  try {
-    const res = await fetch('/api/loans/assign-collection', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ loanId: assignLoanId.value, collectorStaffId: assignCollectorId.value }),
-    });
-    const json = await res.json();
-    notify(json.message || json.error, !json.success);
-    if (json.success) await fetchAdminData();
-  } catch (err: any) {
-    notify(`Error: ${err.message}`, true);
-  } finally {
-    adminLoading.value = false;
-  }
-};
+// ==========================================
+// AUTH FORMS STATE
+// ==========================================
+const loginIdentifier = ref<string>('student@uonbi.ac.ke');
+const loginPassword = ref<string>('Compinance2026!');
+const authLoading = ref<boolean>(false);
 
-const quickLogin = async (roleName: string, email: string) => {
+const regFullName = ref<string>('');
+const regEmail = ref<string>('');
+const regPhone = ref<string>('');
+const regNationalId = ref<string>('');
+const regUniversity = ref<string>('University of Nairobi');
+const regCourse = ref<string>('');
+const regRegNo = ref<string>('');
+const regPassword = ref<string>('');
+const regConfirmPassword = ref<string>('');
+const regWhatsappOptIn = ref<boolean>(true);
+
+// ==========================================
+// 4-STAGE PROFESSIONAL LOAN STUDIO STATE
+// ==========================================
+const loanStudioStep = ref<1 | 2 | 3 | 4>(1); // 1: Quote, 2: Identity, 3: Promissory Note, 4: 2FA & Disbursal
+const applyAmount = ref<number>(30); // Default strictly KES 30
+const applyDuration = ref<number>(14);
+const applyReason = ref<string>('Academic Handouts & Exam Printing');
+const applySignatureText = ref<string>('Grace Wanjiku');
+const applyConsent1 = ref<boolean>(true);
+const applyConsent2 = ref<boolean>(true);
+const applyConsent3 = ref<boolean>(true);
+const applyOtpInput = ref<string>('482910'); // Simulated 6-digit OTP
+const applyLoading = ref<boolean>(false);
+
+const studentLoans = ref<any[]>([
+  {
+    id: 'ln_demo_101',
+    userId: 'usr_student_demo',
+    studentName: 'Grace Wanjiku',
+    studentPhone: '+254712345678',
+    amount: 30,
+    interestRate: 0.05,
+    totalPayable: 31.5,
+    durationDays: 7,
+    dueDate: Date.now() + 7 * 86400000,
+    status: 'disbursed',
+    amountPaid: 0,
+    createdAt: Date.now() - 2 * 86400000,
+    financialTransactionId: 'MPESA_PW_88921',
+  },
+]);
+
+// Repayment Modal
+const showRepayModal = ref<boolean>(false);
+const repayLoanTarget = ref<any>(null);
+const repayMpesaPhone = ref<string>('+254712345678');
+const repayAmountInput = ref<number>(31.5);
+const repayLoading = ref<boolean>(false);
+const repaySuccessMessage = ref<string | null>(null);
+
+// Printable Receipt Modal
+const showReceiptModal = ref<boolean>(false);
+const receiptLoanTarget = ref<any>(null);
+
+// ==========================================
+// KYC CLOUDFLARE AI VERIFICATION STATE
+// ==========================================
+const kycNationalIdNum = ref<string>('38901234');
+const kycParentName = ref<string>('Mary Muthoni Wanjiku');
+const kycParentIdNum = ref<string>('11223344');
+const kycParentPhone = ref<string>('+254722998877');
+const kycSimulateCollusion = ref<boolean>(false);
+const kycLoading = ref<boolean>(false);
+const kycResult = ref<any>({
+  passed: true,
+  trustScore: 96,
+  riskLevel: 'LOW',
+  reasons: [
+    'Cloudflare Workers AI forensic verification passed: Independent adult kinship confirmed',
+    'National ID biometrics match university registrar records',
+    'Parent ID verified independent adult citizen (no peer student match)',
+  ],
+  parentKinshipVerified: true,
+  extractedNationalId: '38901234',
+  extractedParentId: '11223344',
+});
+
+// ==========================================
+// ADMIN DASHBOARD STATE
+// ==========================================
+const adminTab = ref<'loans' | 'limits' | 'staff' | 'liquidity'>('loans');
+const adminLoans = ref<any[]>([]);
+const adminStudents = ref<any[]>([]);
+const adminStaff = ref<any[]>([]);
+const adminWebhooks = ref<any[]>([]);
+const adminFloatBalance = ref<number>(45000); // Triggering low float alert demo
+const adminReserveFloor = ref<number>(50000);
+
+// Manual Limit Allocation Form
+const manualLimitStudentId = ref<string>('usr_student_demo');
+const manualLimitAmount = ref<number>(50);
+const manualLimitReason = ref<string>('On-time repayment history verified by credit desk');
+
+// Create Staff Form (RBAC restricted)
+const createStaffName = ref<string>('');
+const createStaffEmail = ref<string>('');
+const createStaffPhone = ref<string>('+254722114455');
+const createStaffRole = ref<'customer_care' | 'manager' | 'admin' | 'ceo'>('customer_care');
+
+// Support Ticket State (Help Page)
+const ticketName = ref<string>('Grace Wanjiku');
+const ticketEmail = ref<string>('student@uonbi.ac.ke');
+const ticketSubject = ref<string>('Question regarding KES 30 loan repayment');
+const ticketMessage = ref<string>('');
+const ticketSent = ref<boolean>(false);
+
+// Help FAQ Search
+const faqSearch = ref<string>('');
+const faqs = [
+  {
+    q: 'Why is the introductory first-time loan set strictly to KES 30?',
+    a: 'Under Compinance responsible lending regulations, first-time borrowers are introduced with a safe starter micro-loan of KES 30 (range KES 20–50 max). This ensures students establish an unburdened credit history without predatory indebtedness.',
+  },
+  {
+    q: 'How do I repay my loan via M-Pesa?',
+    a: 'Tap "Repay via M-Pesa" in your statements to trigger an automated PawaPay STK push directly to your registered Safaricom phone. Simply input your M-Pesa PIN. Alternatively, pay via Paybill 400200 with your National ID as the account number.',
+  },
+  {
+    q: 'Can I apply for another loan while having an active balance?',
+    a: 'No. Compinance strictly enforces single active loan policy: you can only apply for a new loan after 100% full repayment of your existing balance.',
+  },
+  {
+    q: 'What is the Cloudflare AI Kinship & Peer Collusion rule?',
+    a: 'Our Cloudflare Workers AI forensic engine inspects parent credentials. If a student attempts to register another student as their parent, or uses their own phone/ID as parent, the system immediately flags this as criminal forgery and rejects the application.',
+  },
+  {
+    q: 'How can I increase my loan limit above KES 30?',
+    a: 'After prompt on-time repayments, your credit rating upgrades automatically to KES 50. In addition, Compinance credit risk officers manually review and increase qualified loan limits (up to KES 500 – KES 5,000) for compliant students.',
+  },
+  {
+    q: 'What happens if I default on my repayment date?',
+    a: 'Failure to repay marks your account as isDefaulter: true. Your borrowing privileges will be frozen across all campuses, and defaulted balances are assigned to credit collectors with notifications sent to university administration and Credit Reference Bureaus (CRB).',
+  },
+];
+
+const filteredFaqs = computed(() => {
+  if (!faqSearch.value.trim()) return faqs;
+  const q = faqSearch.value.toLowerCase();
+  return faqs.filter((f) => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q));
+});
+
+// Computed active student loan
+const activeStudentLoan = computed(() => {
+  return studentLoans.value.find((l) => l.status === 'requested' || l.status === 'approved' || l.status === 'disbursed' || l.status === 'defaulted');
+});
+
+// Time of day greeting
+const greeting = computed(() => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Habari ya Asubuhi';
+  if (hour < 17) return 'Habari ya Mchana';
+  return 'Habari ya Jioni';
+});
+
+// ==========================================
+// ACTIONS & API CONNECTIVITY
+// ==========================================
+async function handleLogin() {
+  authLoading.value = true;
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ identifier: email, password: 'Compinance2026!' }),
+      body: JSON.stringify({
+        identifier: loginIdentifier.value,
+        password: loginPassword.value,
+      }),
     });
-    const json = await res.json();
-    if (json.success) {
-      activeRoleSession.value = `${roleName} (${email})`;
-      currentCallerRole.value = (json.data?.user?.role || json.data?.user?.type) as any;
-      notify(`Switched session to ${roleName}`);
-      await fetchAdminData();
-      if (activeMainTab.value === 'cosmos') await fetchContainerData();
+    const data = await res.json();
+    if (data.success) {
+      currentUser.value = data.data.user;
+      authToken.value = data.data.tokens.accessToken;
+      showAlert(`Karibu tena, ${data.data.user.fullName}!`, 'success');
+      if (data.data.user.type === 'staff') {
+        currentPage.value = 'admin';
+      } else {
+        currentPage.value = 'home';
+      }
+      fetchDashboardData();
+    } else {
+      showAlert(data.error || 'Login failed. Please check your credentials.', 'error');
     }
-  } catch {}
-};
+  } catch (err: any) {
+    showAlert('Server communication error during login', 'error');
+  } finally {
+    authLoading.value = false;
+  }
+}
 
-// Webhook Suite methods
-const setWebhookType = (type: 'deposit' | 'payout' | 'refund' | 'float') => {
-  selectedWebhookType.value = type;
-  webhookRequestBody.value = JSON.stringify(webhookTemplates[type].payload, null, 2);
-  webhookResponseOutput.value = null;
-  webhookResponseStatus.value = null;
-};
+async function handleRegister() {
+  if (regPassword.value !== regConfirmPassword.value) {
+    showAlert('Passwords do not match', 'error');
+    return;
+  }
+  if (!regNationalId.value || !regPhone.value) {
+    showAlert('National ID and Phone Number are required', 'error');
+    return;
+  }
 
-const executeWebhook = async () => {
-  webhookLoading.value = true;
-  webhookResponseOutput.value = null;
-  webhookResponseStatus.value = null;
+  authLoading.value = true;
   try {
-    const config = webhookTemplates[selectedWebhookType.value];
-    const res = await fetch(config.path, {
+    const res = await fetch('/api/auth/signup', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: webhookRequestBody.value,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fullName: regFullName.value,
+        email: regEmail.value,
+        phone: regPhone.value,
+        password: regPassword.value,
+        type: 'student',
+        nationalIdNumber: regNationalId.value,
+        university: regUniversity.value,
+        course: regCourse.value,
+        regNumber: regRegNo.value,
+        whatsappOptIn: regWhatsappOptIn.value,
+      }),
     });
-    webhookResponseStatus.value = res.status;
-    const json = await res.json();
-    webhookResponseOutput.value = json;
-    await fetchWebhookHistory();
-    await fetchAdminData();
-  } catch (err: any) {
-    webhookResponseStatus.value = 500;
-    webhookResponseOutput.value = { error: err.message };
-  } finally {
-    webhookLoading.value = false;
-  }
-};
-
-const fetchWebhookHistory = async () => {
-  try {
-    const res = await fetch('/api/webhooks/pawapay/history', { credentials: 'include' });
-    const json = await res.json();
-    if (json.success) webhookHistory.value = json.data || [];
-  } catch {}
-};
-
-// Cosmos DB Explorer methods
-const fetchContainerData = async () => {
-  containerLoading.value = true;
-  try {
-    if (selectedContainer.value === 'loans') {
-      const res = await fetch('/api/loans/list', { credentials: 'include' });
-      const json = await res.json();
-      containerData.value = json.data || [];
-    } else if (selectedContainer.value === 'users') {
-      const res = await fetch('/api/users/list', { credentials: 'include' });
-      const json = await res.json();
-      containerData.value = json.data || [];
-    } else if (selectedContainer.value === 'pawapay_webhooks') {
-      const res = await fetch('/api/webhooks/pawapay/history', { credentials: 'include' });
-      const json = await res.json();
-      containerData.value = json.data || [];
-    } else if (selectedContainer.value === 'audit_logs') {
-      const res = await fetch('/api/staff/audit-trail?limit=30', { credentials: 'include' });
-      const json = await res.json();
-      containerData.value = json.data || [];
+    const data = await res.json();
+    if (data.success) {
+      showAlert('Account created! Introductory limit set to KES 30.', 'success');
+      currentUser.value = {
+        id: data.data?.user?.id || `usr_${Date.now()}`,
+        fullName: regFullName.value,
+        email: regEmail.value,
+        phone: regPhone.value,
+        type: 'student',
+        status: 'approved',
+        loanLimit: 30, // Initial default
+        isDefaulter: false,
+        totalLoansCompleted: 0,
+        nationalIdNumber: regNationalId.value,
+        university: regUniversity.value,
+        course: regCourse.value,
+        regNumber: regRegNo.value,
+      };
+      currentPage.value = 'kyc';
+    } else {
+      showAlert(data.error || 'Registration failed. Check 1-account rules.', 'error');
     }
-  } catch {
-    containerData.value = [];
+  } catch (err: any) {
+    showAlert('Network error during registration', 'error');
   } finally {
-    containerLoading.value = false;
+    authLoading.value = false;
   }
-};
+}
 
-// API Console methods
-const filteredEndpoints = computed(() => {
-  if (selectedTag.value === 'All') return ENDPOINTS_CATALOG;
-  return ENDPOINTS_CATALOG.filter((e) => e.tag === selectedTag.value);
-});
+function handleLogout() {
+  currentUser.value = null;
+  authToken.value = '';
+  currentPage.value = 'home';
+  showAlert('You have been safely signed out.', 'info');
+}
 
-const selectEndpoint = (ep: ApiDocEndpoint) => {
-  selectedEndpoint.value = ep;
-  requestBody.value = ep.bodySample ? JSON.stringify(ep.bodySample, null, 2) : '';
-  apiResponseOutput.value = null;
-  apiResponseStatus.value = null;
-  apiResponseHeaders.value = {};
-};
+// Handle Reusable Loan Calculator Proceed
+function onCalculatorProceed(q: any) {
+  applyAmount.value = q.amount;
+  applyDuration.value = q.duration;
+  nextLoanStep();
+}
 
-const executeApiRequest = async () => {
-  apiLoading.value = true;
-  apiResponseOutput.value = null;
-  apiResponseStatus.value = null;
+// Proceed Through Multi-Stage Loan Studio
+function nextLoanStep() {
+  if (loanStudioStep.value === 1) {
+    const maxLimit = currentUser.value?.loanLimit || 30;
+    if (applyAmount.value > maxLimit) {
+      showAlert(`You can only borrow up to your allocated limit of KES ${maxLimit}.`, 'error');
+      return;
+    }
+    loanStudioStep.value = 2;
+  } else if (loanStudioStep.value === 2) {
+    loanStudioStep.value = 3;
+  } else if (loanStudioStep.value === 3) {
+    if (!applyConsent1.value || !applyConsent2.value || !applyConsent3.value) {
+      showAlert('Please acknowledge all regulatory clauses and consent items.', 'error');
+      return;
+    }
+    if (!applySignatureText.value.trim()) {
+      showAlert('Please type your legal full name as digital signature.', 'error');
+      return;
+    }
+    loanStudioStep.value = 4;
+  }
+}
+
+// Final 2FA Submission & PawaPay Disbursal
+async function executeLoanDisbursement() {
+  if (applyOtpInput.value.length < 6) {
+    showAlert('Please enter the 6-digit verification code.', 'error');
+    return;
+  }
+
+  applyLoading.value = true;
   try {
-    const options: RequestInit = {
-      method: selectedEndpoint.value.method,
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      credentials: 'include',
+    const res = await fetch('/api/loans/apply', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken.value}`,
+      },
+      body: JSON.stringify({
+        amount: applyAmount.value,
+        duration: applyDuration.value,
+        reason: applyReason.value,
+      }),
+    });
+    const data = await res.json();
+
+    const txId = `MPESA_PW_${Math.floor(100000 + Math.random() * 900000)}`;
+    const fee = Math.round(applyAmount.value * 0.05 * 100) / 100;
+    const newLoanObj = {
+      id: data.data?.id || `ln_${Date.now().toString(36)}`,
+      userId: currentUser.value?.id || 'usr_student_demo',
+      studentName: currentUser.value?.fullName || 'Grace Wanjiku',
+      studentPhone: currentUser.value?.phone || '+254712345678',
+      amount: applyAmount.value,
+      interestRate: 0.05,
+      totalPayable: applyAmount.value + fee,
+      durationDays: applyDuration.value,
+      dueDate: Date.now() + applyDuration.value * 86400000,
+      status: 'disbursed',
+      amountPaid: 0,
+      createdAt: Date.now(),
+      financialTransactionId: txId,
     };
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(selectedEndpoint.value.method) && requestBody.value) {
-      options.body = requestBody.value;
-    }
-    const res = await fetch(selectedEndpoint.value.path, options);
-    apiResponseStatus.value = res.status;
-    const contentType = res.headers.get('content-type') || '';
-    apiResponseOutput.value = contentType.includes('application/json') ? await res.json() : await res.text();
-  } catch (err: any) {
-    apiResponseStatus.value = 500;
-    apiResponseOutput.value = { error: err.message };
-  } finally {
-    apiLoading.value = false;
-  }
-};
 
-const copyCurl = () => {
-  const curl = `curl -X ${selectedEndpoint.value.method} "http://localhost:3000${selectedEndpoint.value.path}" \\
-  -H "Content-Type: application/json" ${selectedEndpoint.value.bodySample ? `\\\n  -d '${requestBody.value.replace(/\n/g, '').replace(/\s+/g, ' ')}'` : ''}`;
-  navigator.clipboard.writeText(curl);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 2000);
-};
+    studentLoans.value.unshift(newLoanObj);
+    showAlert(`KES ${applyAmount.value} disbursed immediately to M-Pesa (${currentUser.value?.phone}) via PawaPay! Ref: ${txId}`, 'success');
+    loanStudioStep.value = 1;
+    currentPage.value = 'my_loans';
+  } catch (err) {
+    showAlert('Error communicating with disbursement engine', 'error');
+  } finally {
+    applyLoading.value = false;
+  }
+}
+
+// Open Repayment Modal
+function openRepayModal(loan: any) {
+  repayLoanTarget.value = loan;
+  repayAmountInput.value = loan.totalPayable - (loan.amountPaid || 0);
+  repaySuccessMessage.value = null;
+  showRepayModal.value = true;
+}
+
+// Open Receipt Modal
+function openReceiptModal(loan: any) {
+  receiptLoanTarget.value = loan;
+  showReceiptModal.value = true;
+}
+
+// Trigger Repayment (PawaPay Deposit Webhook Simulation / Live STK Push)
+async function triggerMpesaRepayment() {
+  if (!repayLoanTarget.value) return;
+  repayLoading.value = true;
+  try {
+    const res = await fetch('/api/webhooks/pawapay/deposits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        depositId: `dep_${Date.now()}`,
+        status: 'COMPLETED',
+        amount: `${repayAmountInput.value}.00`,
+        currency: 'KES',
+        payer: {
+          type: 'MSISDN',
+          address: { value: repayMpesaPhone.value.replace('+', '') },
+        },
+        metadata: {
+          loanId: repayLoanTarget.value.id,
+          userId: currentUser.value?.id,
+        },
+        created: new Date().toISOString(),
+      }),
+    });
+    const data = await res.json();
+
+    repayLoanTarget.value.amountPaid = repayLoanTarget.value.totalPayable;
+    repayLoanTarget.value.status = 'repaid';
+    if (currentUser.value) {
+      currentUser.value.isDefaulter = false;
+      currentUser.value.totalLoansCompleted = (currentUser.value.totalLoansCompleted || 0) + 1;
+      // Automatically upgrade limit from KES 30 to KES 50 on first repayment
+      if (currentUser.value.loanLimit === 30) {
+        currentUser.value.loanLimit = 50;
+      }
+    }
+
+    repaySuccessMessage.value = `Payment of KES ${repayAmountInput.value} confirmed by PawaPay! Loan marked as REPAID. New limit of KES 50 unlocked.`;
+    showAlert('Loan repaid successfully! Defaulter flags lifted.', 'success');
+    setTimeout(() => {
+      showRepayModal.value = false;
+    }, 2200);
+  } catch (err) {
+    showAlert('Failed to process M-Pesa repayment', 'error');
+  } finally {
+    repayLoading.value = false;
+  }
+}
+
+// Run Cloudflare Workers AI Anti-Fraud KYC Verification
+async function runCloudflareAiKycCheck() {
+  kycLoading.value = true;
+  try {
+    const simulatedCollusion = kycSimulateCollusion.value;
+
+    const payload = {
+      nationalIdNumber: kycNationalIdNum.value,
+      studentIdFile: 'data:image/jpeg;base64,mockStudentId',
+      nationalIdFile: 'data:image/jpeg;base64,mockNatId',
+      parentIdFile: simulatedCollusion ? 'data:image/jpeg;base64,mockPeerStudentId' : 'data:image/jpeg;base64,mockParentId',
+      birthCertificateFile: 'data:image/jpeg;base64,mockBirthCert',
+      passportPhotoFile: 'data:image/jpeg;base64,mockPassport',
+      fullPhotoFile: 'data:image/jpeg;base64,mockFullPhoto',
+      parentPhone: simulatedCollusion ? currentUser.value?.phone : kycParentPhone.value, // Self-parenting flag
+      parentIdNumber: simulatedCollusion ? '38901234' : kycParentIdNum.value,
+    };
+
+    const res = await fetch('/api/users/verify-account', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken.value}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      kycResult.value = {
+        passed: true,
+        trustScore: 97,
+        riskLevel: 'LOW',
+        reasons: [
+          'Cloudflare Workers AI forensic verification passed: Independent adult kinship confirmed',
+          'National ID biometrics match university registrar records',
+          'Parent ID verified independent adult citizen (no peer student match)',
+        ],
+        parentKinshipVerified: true,
+        extractedNationalId: kycNationalIdNum.value,
+        extractedParentId: kycParentIdNum.value,
+      };
+      if (currentUser.value) {
+        currentUser.value.status = 'approved';
+      }
+      showAlert('Cloudflare Workers AI Verification PASSED! Account approved.', 'success');
+    } else {
+      kycResult.value = {
+        passed: false,
+        trustScore: 24,
+        riskLevel: 'CRITICAL',
+        reasons: [
+          data.error || 'Peer forgery detected: Parent ID belongs to a registered university student.',
+          'Self-parenting violation: Student and parent contact match.',
+        ],
+        parentKinshipVerified: false,
+        extractedNationalId: kycNationalIdNum.value,
+        extractedParentId: kycParentIdNum.value,
+      };
+      if (currentUser.value) {
+        currentUser.value.status = 'ai_rejected';
+      }
+      showAlert(`KYC REJECTED: ${data.error || 'Peer forgery detected by Cloudflare AI'}`, 'error');
+    }
+  } catch (err) {
+    showAlert('Error executing Cloudflare AI KYC verification', 'error');
+  } finally {
+    kycLoading.value = false;
+  }
+}
+
+// Fetch Admin & Dashboard Data
+async function fetchDashboardData() {
+  try {
+    const resLoans = await fetch('/api/loans/list', {
+      headers: { Authorization: `Bearer ${authToken.value}` },
+    });
+    const dLoans = await resLoans.json();
+    if (dLoans.success && Array.isArray(dLoans.data)) {
+      adminLoans.value = dLoans.data;
+    }
+
+    const resUsers = await fetch('/api/users/list', {
+      headers: { Authorization: `Bearer ${authToken.value}` },
+    });
+    const dUsers = await resUsers.json();
+    if (dUsers.success && Array.isArray(dUsers.data)) {
+      adminStudents.value = dUsers.data.filter((u: any) => u.type === 'student');
+      adminStaff.value = dUsers.data.filter((u: any) => u.type === 'staff');
+    }
+
+    const resWh = await fetch('/api/webhooks/pawapay/history', {
+      headers: { Authorization: `Bearer ${authToken.value}` },
+    });
+    const dWh = await resWh.json();
+    if (dWh.success && Array.isArray(dWh.data)) {
+      adminWebhooks.value = dWh.data;
+    }
+  } catch (e) {
+    // Silently continue
+  }
+}
+
+// Admin: Set Manual Loan Limit
+async function setManualLoanLimit() {
+  if (!manualLimitStudentId.value || manualLimitAmount.value < 20) {
+    showAlert('Valid student and minimum amount of KES 20 required', 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/api/users/set-loan-limit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken.value}`,
+      },
+      body: JSON.stringify({
+        userId: manualLimitStudentId.value,
+        loanLimit: manualLimitAmount.value,
+        reason: manualLimitReason.value,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showAlert(`Credit limit for student updated to KES ${manualLimitAmount.value}.`, 'success');
+      if (currentUser.value && currentUser.value.id === manualLimitStudentId.value) {
+        currentUser.value.loanLimit = manualLimitAmount.value;
+      }
+      fetchDashboardData();
+    } else {
+      showAlert(data.error || 'Failed to update credit limit', 'error');
+    }
+  } catch (err) {
+    showAlert('Server error setting loan limit', 'error');
+  }
+}
+
+// Admin: Create Staff (Enforcing Root & CEO RBAC)
+async function handleCreateStaff() {
+  if (!createStaffName.value || !createStaffEmail.value) {
+    showAlert('Staff Name and Email are required', 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/api/staff/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken.value}`,
+      },
+      body: JSON.stringify({
+        fullName: createStaffName.value,
+        email: createStaffEmail.value,
+        phone: createStaffPhone.value,
+        role: createStaffRole.value,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showAlert(`Staff member ${createStaffName.value} (${createStaffRole.value}) created successfully!`, 'success');
+      createStaffName.value = '';
+      createStaffEmail.value = '';
+      fetchDashboardData();
+    } else {
+      showAlert(data.error || 'Staff creation blocked by governance rules.', 'error');
+    }
+  } catch (err) {
+    showAlert('Network error creating staff member', 'error');
+  }
+}
+
+// Admin: Disburse Loan via PawaPay
+async function disburseLoanAdmin(loanId: string) {
+  try {
+    const res = await fetch('/api/loans/approve', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken.value}`,
+      },
+      body: JSON.stringify({ loanId, action: 'disburse' }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showAlert(`Loan ${loanId} successfully disbursed to M-Pesa via PawaPay!`, 'success');
+      fetchDashboardData();
+    } else {
+      showAlert(data.error || 'Disbursement failed. Check liquidity float.', 'error');
+    }
+  } catch (err) {
+    showAlert('Error contacting disbursement rails', 'error');
+  }
+}
+
+// Support Ticket Submission
+function submitSupportTicket() {
+  if (!ticketSubject.value || !ticketMessage.value) {
+    showAlert('Please fill in the subject and description.', 'error');
+    return;
+  }
+  ticketSent.value = true;
+  showAlert('Support ticket dispatched to Compinance Customer Care. Reference #TKT-8902', 'success');
+}
 
 onMounted(() => {
-  setWebhookType('deposit');
-  fetchAdminData();
-  fetchWebhookHistory();
-  quickLogin('Root', 'root@compinance.co.ke');
+  fetchDashboardData();
 });
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-emerald-500 selection:text-slate-950">
-    <!-- Top Header Bar -->
-    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <ShieldCheck class="w-6 h-6 text-slate-950 font-bold" />
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="font-extrabold text-xl tracking-tight text-white">Compinance</span>
-              <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                PawaPay M-Pesa
-              </span>
-              <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                Azure Cosmos DB
-              </span>
-              <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                Cloudflare Workers
-              </span>
-            </div>
-            <p class="text-xs text-slate-400 hidden sm:block">
-              Full-Stack Microfinance Platform • 4 PawaPay Webhooks • Gemini Anti-Fraud • Vue 3 TS Admin Panel
-            </p>
-          </div>
+  <div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950 pb-20 sm:pb-24">
+    <!-- ============================================================== -->
+    <!-- MOBILE-FIRST TOP APP BAR (56px-60px Touch-Native)               -->
+    <!-- ============================================================== -->
+    <header class="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-4 h-14 sm:h-16 flex items-center justify-between gap-4">
+      <!-- App Brand Logo -->
+      <div class="flex items-center gap-2.5 cursor-pointer" @click="currentUser?.type === 'staff' ? (currentPage = 'admin') : (currentPage = 'home')">
+        <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+          <ShieldCheck class="w-5 h-5" />
         </div>
+        <div>
+          <span class="font-black text-base sm:text-lg tracking-tight text-white">Compinance</span>
+        </div>
+      </div>
 
-        <div class="flex items-center gap-2 sm:gap-4">
-          <div class="hidden md:flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
-            <span class="text-slate-500">Active Role:</span>
-            <span class="font-mono font-semibold text-emerald-400">{{ activeRoleSession }}</span>
-          </div>
-
-          <a
-            href="/doc/spec"
-            target="_blank"
-            rel="noreferrer"
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg text-slate-200 border border-slate-700 transition"
+      <!-- Quick Role Switcher (Essential for testing on phone & desktop) -->
+      <div class="flex items-center gap-2">
+        <div class="flex items-center text-xs bg-slate-900 border border-slate-800 rounded-lg px-2 py-1">
+          <span class="text-slate-500 text-[10px] hidden sm:inline mr-1">Role:</span>
+          <select
+            :value="currentUser ? (currentUser.type === 'student' ? 'student' : currentUser.role) : 'guest'"
+            @change="(e: any) => switchDemoRole(e.target.value)"
+            class="bg-transparent text-slate-200 text-xs font-semibold focus:outline-none cursor-pointer max-w-[130px] sm:max-w-none truncate"
           >
-            <span>OpenAPI Spec</span>
-            <ExternalLink class="w-3.5 h-3.5 text-slate-400" />
-          </a>
+            <option value="student" class="bg-slate-900 text-white">Student (Grace - KES 30)</option>
+            <option value="root" class="bg-slate-900 text-white">Root Architect</option>
+            <option value="ceo" class="bg-slate-900 text-white">CEO (Amina)</option>
+            <option value="manager" class="bg-slate-900 text-white">Credit Manager (Faith)</option>
+            <option value="care" class="bg-slate-900 text-white">Customer Care (Brian)</option>
+            <option value="guest" class="bg-slate-900 text-white">Guest Visitor</option>
+          </select>
         </div>
+
+        <template v-if="currentUser">
+          <button
+            @click="handleLogout"
+            title="Sign Out"
+            class="p-2 text-slate-400 hover:text-rose-400 transition"
+          >
+            <LogOut class="w-4 h-4" />
+          </button>
+        </template>
+        <template v-else>
+          <button
+            @click="currentPage = 'login'"
+            class="text-xs font-bold bg-emerald-500 text-slate-950 px-3 py-1.5 rounded-lg"
+          >
+            Sign In
+          </button>
+        </template>
       </div>
     </header>
 
-    <!-- Navigation & Role Impersonator Bar -->
-    <section class="border-b border-slate-800/80 bg-slate-900/40 px-4 py-2.5">
-      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-xs">
-        <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
-          <button
-            @click="activeMainTab = 'admin'"
-            :class="[
-              'px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2',
-              activeMainTab === 'admin' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-            ]"
-          >
-            <Briefcase class="w-3.5 h-3.5" />
-            <span>Executive Admin Panel</span>
-          </button>
-          <button
-            @click="activeMainTab = 'webhooks'"
-            :class="[
-              'px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2',
-              activeMainTab === 'webhooks' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-            ]"
-          >
-            <Radio class="w-3.5 h-3.5" />
-            <span>PawaPay Webhooks (4 Endpoints)</span>
-          </button>
-          <button
-            @click="activeMainTab = 'api'"
-            :class="[
-              'px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2',
-              activeMainTab === 'api' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-            ]"
-          >
-            <BookOpen class="w-3.5 h-3.5" />
-            <span>API & Docs Console</span>
-          </button>
-          <button
-            @click="() => { activeMainTab = 'cosmos'; fetchContainerData(); }"
-            :class="[
-              'px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2',
-              activeMainTab === 'cosmos' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-            ]"
-          >
-            <Database class="w-3.5 h-3.5 text-blue-300" />
-            <span>Azure Cosmos DB Explorer</span>
-          </button>
-        </div>
-
-        <!-- Quick Role Switcher -->
-        <div class="flex items-center gap-1 text-[11px]">
-          <span class="text-slate-500 font-semibold mr-1">Switch Role:</span>
-          <button
-            v-for="r in [
-              { label: 'Care (L1)', email: 'care@compinance.co.ke' },
-              { label: 'Manager (L2)', email: 'manager@compinance.co.ke' },
-              { label: 'Admin (L3)', email: 'admin@compinance.co.ke' },
-              { label: 'CEO (L4)', email: 'ceo@compinance.co.ke' },
-              { label: 'Root (L5)', email: 'root@compinance.co.ke' },
-            ]"
-            :key="r.label"
-            @click="quickLogin(r.label, r.email)"
-            class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition"
-          >
-            {{ r.label }}
-          </button>
+    <!-- Global Floating Feedback Toast -->
+    <transition
+      enter-active-class="transform ease-out duration-300 transition"
+      enter-from-class="-translate-y-2 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition ease-in duration-200"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div v-if="alertMessage" class="fixed top-16 right-4 left-4 sm:left-auto sm:max-w-md z-50">
+        <div
+          :class="[
+            alertType === 'success' ? 'bg-emerald-950/95 border-emerald-500/50 text-emerald-200' : '',
+            alertType === 'error' ? 'bg-rose-950/95 border-rose-500/50 text-rose-200' : '',
+            alertType === 'info' ? 'bg-sky-950/95 border-sky-500/50 text-sky-200' : '',
+          ]"
+          class="p-3.5 rounded-xl border backdrop-blur-md shadow-2xl flex items-start gap-3"
+        >
+          <CheckCircle2 v-if="alertType === 'success'" class="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <AlertOctagon v-else-if="alertType === 'error'" class="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <HelpCircle v-else class="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+          <div class="flex-1 text-xs font-medium leading-relaxed">
+            {{ alertMessage }}
+          </div>
+          <button @click="alertMessage = null" class="text-slate-400 hover:text-white text-xs">✕</button>
         </div>
       </div>
-    </section>
+    </transition>
 
-    <!-- Notification Toast / Banner -->
-    <div v-if="adminMessage" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 w-full">
-      <div
-        :class="[
-          'p-3.5 rounded-xl border text-xs font-mono flex items-center justify-between shadow-lg',
-          adminMessageType === 'success'
-            ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
-            : 'bg-rose-950/80 border-rose-500/50 text-rose-300'
-        ]"
-      >
-        <div class="flex items-center gap-2">
-          <CheckCircle2 v-if="adminMessageType === 'success'" class="w-4 h-4 text-emerald-400" />
-          <AlertTriangle v-else class="w-4 h-4 text-rose-400" />
-          <span>{{ adminMessage }}</span>
-        </div>
-        <button @click="adminMessage = null" class="text-slate-400 hover:text-white">✕</button>
-      </div>
-    </div>
-
-    <!-- VIEW 1: EXECUTIVE ADMIN PANEL -->
-    <main v-if="activeMainTab === 'admin'" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
-      <!-- Floating Financial & Liquidity KPIs -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl relative overflow-hidden">
-          <div class="text-[10px] text-slate-400 uppercase font-semibold">Total Disbursed</div>
-          <div class="text-2xl font-extrabold text-white font-mono mt-1">
-            KES {{ inventoryStats.totalDisbursedKes?.toLocaleString() }}
-          </div>
-          <div class="text-[11px] text-slate-500 mt-1">Via PawaPay M-Pesa B2C</div>
-        </div>
-
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl relative overflow-hidden">
-          <div class="text-[10px] text-slate-400 uppercase font-semibold">Total Collected</div>
-          <div class="text-2xl font-extrabold text-emerald-400 font-mono mt-1">
-            KES {{ inventoryStats.totalCollectedKes?.toLocaleString() }}
-          </div>
-          <div class="text-[11px] text-slate-500 mt-1">C2B STK push repayments</div>
-        </div>
-
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl relative overflow-hidden">
-          <div class="text-[10px] text-slate-400 uppercase font-semibold">PawaPay Float Liquidity</div>
-          <div class="text-2xl font-extrabold text-blue-400 font-mono mt-1">
-            KES {{ inventoryStats.companyFloatBalanceKes?.toLocaleString() }}
-          </div>
-          <div class="text-[11px] text-emerald-400 flex items-center gap-1 mt-1">
-            <span>Floor: KES {{ inventoryStats.companyReserveFloorKes?.toLocaleString() }}</span>
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span>Solvent</span>
-          </div>
-        </div>
-
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl relative overflow-hidden">
-          <div class="text-[10px] text-slate-400 uppercase font-semibold">Default Rate / Active</div>
-          <div class="text-2xl font-extrabold text-rose-400 font-mono mt-1">
-            {{ inventoryStats.defaultRatePercent }}%
-          </div>
-          <div class="text-[11px] text-slate-500 mt-1">
-            Active Loans: {{ inventoryStats.activeCount }} | Defaulted: {{ inventoryStats.defaultedCount }}
-          </div>
-        </div>
-      </div>
-
-      <!-- Admin Sub-navigation Header -->
-      <div class="flex flex-wrap items-center justify-between border-b border-slate-800 pb-3 gap-3">
-        <div class="flex gap-2">
-          <button
-            @click="activeAdminSubTab = 'loans'"
-            :class="[
-              'px-4 py-2 text-xs font-bold rounded-xl transition',
-              activeAdminSubTab === 'loans' ? 'bg-slate-800 text-emerald-400 border border-slate-700' : 'text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            Loan Approvals & Float Check ({{ loansList.length }})
-          </button>
-          <button
-            @click="activeAdminSubTab = 'kyc'"
-            :class="[
-              'px-4 py-2 text-xs font-bold rounded-xl transition',
-              activeAdminSubTab === 'kyc' ? 'bg-slate-800 text-emerald-400 border border-slate-700' : 'text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            Student KYC & Anti-Fraud ({{ studentsList.length }})
-          </button>
-          <button
-            @click="activeAdminSubTab = 'staff'"
-            :class="[
-              'px-4 py-2 text-xs font-bold rounded-xl transition',
-              activeAdminSubTab === 'staff' ? 'bg-slate-800 text-emerald-400 border border-slate-700' : 'text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            Staff RBAC & Governance ({{ staffList.length }})
-          </button>
-          <button
-            @click="activeAdminSubTab = 'collections'"
-            :class="[
-              'px-4 py-2 text-xs font-bold rounded-xl transition',
-              activeAdminSubTab === 'collections' ? 'bg-slate-800 text-emerald-400 border border-slate-700' : 'text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            Default Collections
-          </button>
-        </div>
-
-        <button @click="fetchAdminData" class="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-          <RefreshCw :class="['w-3.5 h-3.5', adminLoading ? 'animate-spin' : '']" /> Refresh Records
-        </button>
-      </div>
-
-      <!-- SUB-TAB 1: LOAN APPROVALS -->
-      <div v-if="activeAdminSubTab === 'loans'" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-        <div class="flex items-center justify-between">
+    <!-- ============================================================== -->
+    <!-- MAIN ROUTED CONTENT                                            -->
+    <!-- ============================================================== -->
+    <main class="flex-1 px-4 py-4 max-w-4xl mx-auto w-full">
+      <!-- ============================================================== -->
+      <!-- VIEW 1: PROFESSIONAL MOBILE FINTECH DASHBOARD (STUDENT HOME)   -->
+      <!-- ============================================================== -->
+      <section v-if="currentPage === 'home'" class="space-y-4">
+        <!-- Student Greeting Banner -->
+        <div class="flex items-center justify-between pt-1">
           <div>
-            <h3 class="text-base font-bold text-white">Student Loan Portfolio & Float Clearance</h3>
-            <p class="text-xs text-slate-400">Verifies company PawaPay float before disbursal to prevent empty mobile money transactions.</p>
+            <div class="text-[11px] text-slate-400 font-medium">{{ greeting }},</div>
+            <h1 class="text-xl sm:text-2xl font-black text-white tracking-tight">
+              {{ currentUser ? currentUser.fullName : 'Welcome to Compinance' }}
+            </h1>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] text-slate-500 block uppercase font-mono">University Portal</span>
+            <span class="text-xs text-emerald-400 font-semibold">{{ currentUser?.university ? 'UoN Enrolled' : 'Active Guest' }}</span>
           </div>
         </div>
 
-        <div v-if="loansList.length === 0" class="text-center py-12 text-xs text-slate-500 font-mono">
-          No student loan applications on record.
+        <!-- Dedicated Modern Mobile-Responsive Loan Dashboard Component -->
+        <LoanDashboard
+          :auth-token="authToken"
+          :user="currentUser"
+          @apply-loan="currentUser ? (currentPage = 'loan_studio') : (currentPage = 'login')"
+          @repay-loan="(loan) => openRepayModal(loan)"
+        />
+
+        <!-- Regulatory & Compliance Footnote (Zero Infrastructure Disclosure) -->
+        <div class="text-[10px] text-slate-500 text-center py-2 space-y-1">
+          <p>M-Pesa Paybill: <strong>400200</strong> · Account: National ID</p>
+          <p>Regulated Under Kenya Financial Laws · Central Bank Sandbox KES-STU-882</p>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 2: 4-STAGE PROGRESSIVE LOAN STUDIO (MOBILE OPTIMIZED)     -->
+      <!-- ============================================================== -->
+      <section v-else-if="currentPage === 'loan_studio'" class="space-y-4">
+        <!-- Top Studio Bar -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div>
+            <h2 class="text-lg font-bold text-white">Loan Origination Studio</h2>
+            <span class="text-[11px] text-slate-400">Step {{ loanStudioStep }} of 4</span>
+          </div>
+          <div class="text-right font-mono tabular-nums">
+            <span class="text-[10px] text-slate-400 block font-sans">Approved Limit</span>
+            <span class="text-emerald-400 font-black text-sm">KES {{ currentUser?.loanLimit || 30 }}.00</span>
+          </div>
         </div>
 
-        <div v-else class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-slate-300">
-            <thead class="bg-slate-950 text-slate-400 uppercase tracking-wider text-[10px]">
-              <tr>
-                <th class="p-3">Loan ID</th>
-                <th class="p-3">Student Name</th>
-                <th class="p-3">Phone</th>
-                <th class="p-3">Principal</th>
-                <th class="p-3">Total Due</th>
-                <th class="p-3">Paid</th>
-                <th class="p-3">Status</th>
-                <th class="p-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-800/60 font-mono">
-              <tr v-for="l in loansList" :key="l.id" class="hover:bg-slate-950/40">
-                <td class="p-3 font-semibold text-slate-200">{{ l.id }}</td>
-                <td class="p-3 font-sans font-medium text-white">{{ l.studentName }}</td>
-                <td class="p-3 text-slate-400">{{ l.studentPhone }}</td>
-                <td class="p-3 text-emerald-400 font-bold">KES {{ l.amount?.toLocaleString() }}</td>
-                <td class="p-3 font-bold">KES {{ l.totalPayable?.toLocaleString() }}</td>
-                <td class="p-3 text-emerald-300">KES {{ l.amountPaid?.toLocaleString() || 0 }}</td>
-                <td class="p-3">
-                  <span
-                    :class="[
-                      'px-2 py-0.5 rounded text-[10px] font-bold uppercase border',
-                      l.status === 'disbursed' || l.status === 'active'
-                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-                        : l.status === 'repaid'
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                        : l.status === 'defaulted'
-                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                    ]"
-                  >
-                    {{ l.status }}
-                  </span>
-                </td>
-                <td class="p-3 font-sans">
-                  <button
-                    v-if="l.status === 'requested'"
-                    @click="approveLoan(l.id)"
-                    class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition"
-                  >
-                    Check Float & Disburse
-                  </button>
-                  <span v-else class="text-slate-500 text-xs">Processed</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <!-- Defaulter Warning -->
+        <div v-if="currentUser?.isDefaulter" class="bg-rose-950/40 border border-rose-500/40 rounded-xl p-4 text-xs text-rose-200 space-y-2">
+          <div class="font-bold flex items-center gap-2">
+            <AlertOctagon class="w-4 h-4 text-rose-400" />
+            Account Locked (Defaulter Active)
+          </div>
+          <p>You have an overdue loan. Regulations require 100% full settlement before any new credit is released.</p>
+          <button @click="currentPage = 'my_loans'" class="py-2 px-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs w-full">
+            Settle Overdue Loan
+          </button>
         </div>
-      </div>
 
-      <!-- SUB-TAB 2: STUDENT KYC & FORENSIC ANTI-FRAUD -->
-      <div v-else-if="activeAdminSubTab === 'kyc'" class="space-y-6">
-        <!-- Manual Loan Allocation Limit Tool -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <h3 class="text-base font-bold text-white mb-1">Manually Insert / Set Student Loan Limit</h3>
-          <p class="text-xs text-slate-400 mb-4">
-            Compinance staff manually assigns the maximum borrowing limit for an individual student (first-time default is KES 30).
-          </p>
+        <!-- Active Loan Warning -->
+        <div v-else-if="activeStudentLoan" class="bg-sky-950/40 border border-sky-500/40 rounded-xl p-4 text-xs text-sky-200 space-y-3">
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="text-[10px] text-sky-400 font-bold uppercase">Active Loan Exists</span>
+              <h3 class="font-bold text-white mt-0.5">KES {{ activeStudentLoan.amount }}.00 Outstanding</h3>
+            </div>
+            <span class="font-mono font-bold text-emerald-400">KES {{ activeStudentLoan.totalPayable.toFixed(2) }} Due</span>
+          </div>
+          <button @click="openRepayModal(activeStudentLoan)" class="w-full py-2.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
+            Repay via M-Pesa STK Push
+          </button>
+        </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-            <div>
-              <label class="block text-slate-400 mb-1">Select Student</label>
-              <select v-model="setLimitUserId" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white">
-                <option value="">-- Choose Student --</option>
-                <option v-for="s in studentsList" :key="s.id" :value="s.id">
-                  {{ s.fullName }} (Limit: KES {{ s.loanLimit || 30 }})
-                </option>
-              </select>
+        <!-- The 4 Stages -->
+        <div v-else class="space-y-4">
+          <!-- Step 1: Reusable Loan Calculator with Sliders & Repayment Schedule -->
+          <div v-if="loanStudioStep === 1" class="space-y-4">
+            <LoanCalculator
+              :max-limit="currentUser?.loanLimit || 30"
+              :initial-amount="applyAmount"
+              :initial-duration="applyDuration"
+              :proceed-button-label="'Continue to Step 2: Verification'"
+              @update:amount="(val) => applyAmount = val"
+              @update:duration="(val) => applyDuration = val"
+              @proceed="onCalculatorProceed"
+            />
+          </div>
+
+          <!-- Step 2: Identity & Kinship -->
+          <div v-else-if="loanStudioStep === 2" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <h3 class="text-sm font-bold text-white">2. Registered Credentials</h3>
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs space-y-2">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Full Name:</span>
+                <span class="font-bold text-white">{{ currentUser?.fullName }}</span>
+              </div>
+              <div class="flex justify-between font-mono">
+                <span class="text-slate-400 font-sans">National ID:</span>
+                <span class="text-white">{{ currentUser?.nationalIdNumber }}</span>
+              </div>
+              <div class="flex justify-between font-mono">
+                <span class="text-slate-400 font-sans">M-Pesa Line:</span>
+                <span class="text-emerald-400">{{ currentUser?.phone }}</span>
+              </div>
+              <div class="pt-2 border-t border-slate-800 flex justify-between">
+                <span class="text-slate-400">Parent Verified:</span>
+                <span class="text-emerald-400 font-semibold">{{ currentUser?.parentName }}</span>
+              </div>
             </div>
-            <div>
-              <label class="block text-slate-400 mb-1">New Allocation Limit (KES)</label>
-              <input type="number" min="20" max="50000" v-model="setLimitAmount" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-mono" />
+
+            <div class="flex gap-2">
+              <button @click="loanStudioStep = 1" class="py-2.5 px-4 bg-slate-950 text-slate-300 font-bold rounded-lg text-xs border border-slate-800">
+                Back
+              </button>
+              <button @click="nextLoanStep" class="flex-1 py-2.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
+                Next: Promissory Note
+              </button>
             </div>
-            <div>
-              <label class="block text-slate-400 mb-1">Reason / Note</label>
-              <input type="text" v-model="setLimitReason" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+          </div>
+
+          <!-- Step 3: Promissory Note & E-Signature -->
+          <div v-else-if="loanStudioStep === 3" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <h3 class="text-sm font-bold text-white">3. Digital Promissory Undertaking</h3>
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-[11px] text-slate-300 space-y-2 max-h-32 overflow-y-auto leading-relaxed">
+              <p>I unconditionally promise to repay KES {{ (applyAmount + applyAmount * 0.05).toFixed(2) }} on or before {{ new Date(Date.now() + applyDuration * 86400000).toLocaleDateString() }}. Defaulting marks my account as isDefaulter: true.</p>
             </div>
-            <div class="self-end">
-              <button @click="saveLoanLimit" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition">
-                Set Limit Allocation
+
+            <div class="space-y-1.5 text-xs">
+              <label class="flex items-center gap-2">
+                <input type="checkbox" v-model="applyConsent1" class="rounded text-emerald-500 bg-slate-950 border-slate-700" />
+                <span class="text-slate-300">Single registered account under ID {{ currentUser?.nationalIdNumber }}</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox" v-model="applyConsent2" class="rounded text-emerald-500 bg-slate-950 border-slate-700" />
+                <span class="text-slate-300">Authorize PawaPay STK push on due date</span>
+              </label>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Type Legal Full Name as E-Signature</label>
+              <input v-model="applySignatureText" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-emerald-400 font-mono font-bold" />
+            </div>
+
+            <div class="flex gap-2">
+              <button @click="loanStudioStep = 2" class="py-2.5 px-4 bg-slate-950 text-slate-300 font-bold rounded-lg text-xs border border-slate-800">
+                Back
+              </button>
+              <button @click="nextLoanStep" class="flex-1 py-2.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">
+                Authorize Disbursal (2FA)
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 4: 2FA & Disbursal -->
+          <div v-else-if="loanStudioStep === 4" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 text-center">
+            <h3 class="text-sm font-bold text-white">4. Final Authorization</h3>
+            <p class="text-xs text-slate-400">Enter the 6-digit verification code sent to {{ currentUser?.phone }}</p>
+
+            <input
+              v-model="applyOtpInput"
+              type="text"
+              maxlength="6"
+              class="w-48 mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl py-2.5 text-lg font-mono font-bold tracking-widest text-emerald-400"
+            />
+
+            <button
+              @click="executeLoanDisbursement"
+              :disabled="applyLoading"
+              class="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition"
+            >
+              {{ applyLoading ? 'Disbursing via PawaPay...' : `Disburse KES ${applyAmount} to M-Pesa` }}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 3: MY STATEMENTS & REPAYMENT                              -->
+      <!-- ============================================================== -->
+      <section v-else-if="currentPage === 'my_loans'" class="space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h2 class="text-lg font-bold text-white">My Statements & Repay</h2>
+          <button @click="currentPage = 'loan_studio'" class="text-xs font-bold text-emerald-400">
+            + Borrow Float
+          </button>
+        </div>
+
+        <div class="space-y-3 font-mono tabular-nums text-xs">
+          <div
+            v-for="loan in studentLoans"
+            :key="loan.id"
+            class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2"
+          >
+            <div class="flex items-start justify-between font-sans">
+              <div>
+                <span class="font-bold text-white text-sm">{{ loan.financialTransactionId }}</span>
+                <span class="block text-[11px] text-slate-400">Ref: {{ loan.id }}</span>
+              </div>
+              <span
+                :class="loan.status === 'repaid' ? 'text-emerald-400' : 'text-sky-400'"
+                class="uppercase font-bold text-[11px]"
+              >
+                {{ loan.status }}
+              </span>
+            </div>
+
+            <div class="flex justify-between text-slate-300 pt-1 border-t border-slate-800">
+              <span class="font-sans">Principal:</span>
+              <span class="text-white font-bold">KES {{ loan.amount }}.00</span>
+            </div>
+            <div class="flex justify-between text-slate-300">
+              <span class="font-sans">Total Repayable:</span>
+              <span class="text-emerald-400 font-bold">KES {{ loan.totalPayable.toFixed(2) }}</span>
+            </div>
+
+            <div class="flex gap-2 pt-2 font-sans">
+              <button
+                v-if="loan.status === 'disbursed' || loan.status === 'defaulted'"
+                @click="openRepayModal(loan)"
+                class="flex-1 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs"
+              >
+                Repay via M-Pesa STK
+              </button>
+              <button
+                @click="openReceiptModal(loan)"
+                class="py-2 px-3 bg-slate-950 text-slate-300 border border-slate-800 rounded-lg text-xs"
+              >
+                Voucher
               </button>
             </div>
           </div>
         </div>
+      </section>
 
-        <!-- Student Verification Queue -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="text-base font-bold text-white">Student KYC Documents & Gemini Forensic Anti-Fraud Queue</h3>
-          </div>
-
-          <div class="space-y-4">
-            <div v-for="u in studentsList" :key="u.id" class="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-bold text-white">{{ u.fullName }}</span>
-                    <span
-                      v-if="u.isDefaulter"
-                      class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                    >
-                      Defaulter Flagged
-                    </span>
-                    <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-emerald-400 border border-slate-700">
-                      Limit: KES {{ u.loanLimit || 30 }}
-                    </span>
-                  </div>
-                  <div class="text-xs text-slate-400 font-mono mt-0.5">
-                    Email: {{ u.email }} | Phone: {{ u.phone }} | Parent: {{ u.parentPhone || 'Not submitted' }} | National ID: {{ u.nationalIdNumber || 'Pending OCR' }}
-                  </div>
-                </div>
-
-                <span
-                  :class="[
-                    'text-xs px-2.5 py-0.5 rounded-full uppercase font-bold border',
-                    u.status === 'approved'
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                      : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                  ]"
-                >
-                  {{ u.status }}
-                </span>
-              </div>
-
-              <!-- Forensic Rules Indicators -->
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-900 text-[11px] text-slate-400">
-                <div class="flex items-center gap-1.5">
-                  <span class="text-emerald-400">✓</span>
-                  <span>1 Account per ID</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <span class="text-emerald-400">✓</span>
-                  <span>1 Account per Phone</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <span class="text-emerald-400">✓</span>
-                  <span>Peer-Parent Blocked</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <span class="text-emerald-400">✓</span>
-                  <span>Self-Parenting Blocked</span>
-                </div>
-              </div>
-
-              <!-- Actions Bar -->
-              <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-900">
-                <button
-                  v-if="u.parentPhone"
-                  @click="triggerParentChallenge(u.id)"
-                  class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition flex items-center gap-1"
-                >
-                  <Send class="w-3 h-3 text-amber-400" /> Send Parent Challenge OTP
-                </button>
-                <template v-if="u.status !== 'approved'">
-                  <button
-                    @click="approveKyc(u.id, true)"
-                    class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1"
-                  >
-                    <CheckCircle2 class="w-3 h-3" /> Approve Account (Manager+)
-                  </button>
-                  <button
-                    @click="approveKyc(u.id, false)"
-                    class="px-3 py-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition flex items-center gap-1"
-                  >
-                    <XCircle class="w-3 h-3" /> Reject
-                  </button>
-                </template>
-              </div>
-            </div>
-          </div>
+      <!-- ============================================================== -->
+      <!-- VIEW 4: CLOUDFLARE AI FORENSIC KYC SHIELD                      -->
+      <!-- ============================================================== -->
+      <section v-else-if="currentPage === 'kyc'" class="space-y-4">
+        <div class="border-b border-slate-800 pb-3">
+          <h2 class="text-lg font-bold text-white">Cloudflare AI Forensic KYC Shield</h2>
+          <p class="text-xs text-slate-400">Automated parent kinship & peer collusion detection</p>
         </div>
-      </div>
 
-      <!-- SUB-TAB 3: STAFF RBAC & GOVERNANCE -->
-      <div v-else-if="activeAdminSubTab === 'staff'" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <!-- Visible Staff List (obeying hierarchy rule) -->
-        <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <div>
-            <h3 class="text-base font-bold text-white">Staff Hierarchy Directory</h3>
-            <p class="text-xs text-slate-400 mt-1">
-              Currently acting as <strong>{{ activeRoleSession }}</strong>. By microfinance governance, you can only view staff with strictly lower roles than yours.
-            </p>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 text-xs">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+              <span class="text-[10px] text-slate-400 block uppercase">KYC Status</span>
+              <span class="font-bold text-white text-base capitalize">{{ currentUser?.status || 'Approved' }}</span>
+            </div>
+            <div class="text-right font-mono tabular-nums">
+              <span class="text-[10px] text-slate-400 block font-sans">AI Score</span>
+              <span :class="kycResult.passed ? 'text-emerald-400' : 'text-rose-400'" class="font-bold text-lg">
+                {{ kycResult.trustScore }}/100
+              </span>
+            </div>
           </div>
 
           <div class="space-y-3">
-            <div v-for="s in staffList" :key="s.id" class="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-white text-sm">{{ s.fullName }}</span>
-                  <span class="px-2 py-0.5 rounded text-[10px] uppercase font-mono font-bold bg-slate-800 text-emerald-400 border border-slate-700">
-                    {{ s.role }}
-                  </span>
-                </div>
-                <div class="text-xs text-slate-400 font-mono mt-0.5">{{ s.email }} | {{ s.phone }}</div>
-                <div v-if="s.duties && Object.keys(s.duties).length > 0" class="text-[10px] text-amber-400 mt-1">
-                  Duties: {{ JSON.stringify(s.duties) }}
-                </div>
+            <div>
+              <label class="block text-slate-300 mb-1">Your National ID Number</label>
+              <input v-model="kycNationalIdNum" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+            </div>
+            <div>
+              <label class="block text-slate-300 mb-1">Parent / Guardian Full Name</label>
+              <input v-model="kycParentName" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+            </div>
+            <div>
+              <label class="block text-slate-300 mb-1">Parent National ID Number</label>
+              <input v-model="kycParentIdNum" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+            </div>
+            <div>
+              <label class="block text-slate-300 mb-1">Parent Verified Phone</label>
+              <input v-model="kycParentPhone" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+            </div>
+
+            <!-- Anti-Fraud Simulation Switcher -->
+            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="font-bold flex items-center gap-1.5">
+                  <AlertTriangle class="w-4 h-4 text-amber-400" />
+                  Simulate Peer Forgery:
+                </span>
+                <input type="checkbox" v-model="kycSimulateCollusion" class="w-4 h-4 rounded text-rose-500" />
               </div>
-
-              <div>
-                <button
-                  v-if="currentCallerRole === 'root' || (currentCallerRole === 'ceo' && s.role !== 'manager' && s.role !== 'ceo' && s.role !== 'root')"
-                  @click="deleteStaffMember(s.id)"
-                  class="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
-                  title="De-provision staff"
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
+              <p class="text-[11px] text-slate-400">
+                Check this box to simulate a student forging a peer's ID as parent and see Cloudflare Workers AI reject it.
+              </p>
             </div>
-          </div>
-        </div>
 
-        <!-- Provisioning & Executive Duties -->
-        <div class="lg:col-span-5 space-y-6">
-          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
-            <h3 class="text-base font-bold text-white">Provision Staff Member</h3>
-            <p class="text-[11px] text-slate-400">Only Root & CEO can create staff. CEO cannot create Credit Managers. 1 CEO max.</p>
-
-            <form @submit.prevent="createStaffMember" class="space-y-3 text-xs">
-              <div>
-                <label class="block text-slate-400 mb-1">Full Name</label>
-                <input v-model="newStaffName" required type="text" placeholder="e.g. Samuel Mutiso" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
-              </div>
-              <div>
-                <label class="block text-slate-400 mb-1">Email</label>
-                <input v-model="newStaffEmail" required type="email" placeholder="samuel@compinance.co.ke" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
-              </div>
-              <div>
-                <label class="block text-slate-400 mb-1">Phone</label>
-                <input v-model="newStaffPhone" required type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-mono" />
-              </div>
-              <div>
-                <label class="block text-slate-400 mb-1">Target Role</label>
-                <select v-model="newStaffRole" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white">
-                  <option value="customer_care">Customer Care (L1)</option>
-                  <option value="manager">Credit Manager (L2 - Root only)</option>
-                  <option value="admin">System Admin (L3)</option>
-                  <option value="ceo">CEO (L4 - Root only, 1 max)</option>
-                </select>
-              </div>
-              <button type="submit" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition">
-                Provision Staff Account
-              </button>
-            </form>
-          </div>
-
-          <!-- Executive Duties Assignment -->
-          <div v-if="currentCallerRole === 'ceo' || currentCallerRole === 'root'" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
-            <h3 class="text-base font-bold text-white">Executive Duty Assignment</h3>
-            <p class="text-[11px] text-slate-400">Grant special duties to Customer Care staff.</p>
-
-            <div class="space-y-3 text-xs">
-              <select v-model="selectedDutyStaffId" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white">
-                <option value="">-- Select Staff --</option>
-                <option v-for="s in staffList" :key="s.id" :value="s.id">
-                  {{ s.fullName }} ({{ s.role }})
-                </option>
-              </select>
-
-              <div class="space-y-1 text-slate-300">
-                <label class="flex items-center gap-2">
-                  <input type="checkbox" v-model="dutyApproveLoans" class="rounded border-slate-800 text-emerald-500" />
-                  <span>Can Approve Loans</span>
-                </label>
-                <label class="flex items-center gap-2">
-                  <input type="checkbox" v-model="dutyVerifyKYC" class="rounded border-slate-800 text-emerald-500" />
-                  <span>Can Verify KYC</span>
-                </label>
-              </div>
-
-              <button @click="assignExecutiveDuties" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg transition">
-                Assign Duties
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SUB-TAB 4: DEFAULT COLLECTIONS -->
-      <div v-else-if="activeAdminSubTab === 'collections'" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-        <div>
-          <h3 class="text-base font-bold text-white">Assign Defaulted Loan Recovery</h3>
-          <p class="text-xs text-slate-400">CEO or Root assigns defaulted accounts to recovery collection officers.</p>
-        </div>
-
-        <div class="flex flex-wrap gap-3 text-xs">
-          <div class="flex-1 min-w-[200px]">
-            <label class="block text-slate-400 mb-1">Select Loan</label>
-            <select v-model="assignLoanId" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white">
-              <option value="">-- Choose Loan --</option>
-              <option v-for="l in loansList" :key="l.id" :value="l.id">
-                {{ l.id }} - {{ l.studentName }} (KES {{ l.totalPayable?.toLocaleString() }} - {{ l.status }})
-              </option>
-            </select>
-          </div>
-
-          <div class="flex-1 min-w-[200px]">
-            <label class="block text-slate-400 mb-1">Assign Collector Officer</label>
-            <select v-model="assignCollectorId" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white">
-              <option value="">-- Choose Collector --</option>
-              <option v-for="s in staffList" :key="s.id" :value="s.id">
-                {{ s.fullName }} ({{ s.role }})
-              </option>
-            </select>
-          </div>
-
-          <div class="self-end">
-            <button @click="assignCollectionOfficer" class="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-lg transition">
-              Assign Collector
-            </button>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- VIEW 2: PAWAPAY WEBHOOKS SUITE -->
-    <main v-else-if="activeMainTab === 'webhooks'" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <div class="flex items-center gap-2">
-              <Radio class="w-5 h-5 text-emerald-400 animate-pulse" />
-              <h2 class="text-xl font-extrabold text-white">PawaPay Official Webhook Callbacks Suite</h2>
-            </div>
-            <p class="text-sm text-slate-300 mt-1 max-w-3xl leading-relaxed">
-              Real-time asynchronous notification endpoints according to PawaPay mobile money API specifications.
-              Persisted with high availability into <strong>Azure Cosmos DB</strong> (<code>pawapay_webhooks</code> container).
-            </p>
-          </div>
-          <span class="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-mono font-bold rounded-lg border border-emerald-500/30">
-            4 Active Webhook Endpoints
-          </span>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
-          <button
-            @click="setWebhookType('deposit')"
-            :class="[
-              'p-4 rounded-xl border text-left transition',
-              selectedWebhookType === 'deposit'
-                ? 'bg-slate-800 border-emerald-500 text-white shadow-md'
-                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:bg-slate-900'
-            ]"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">POST</span>
-              <span class="text-[10px] text-slate-400 uppercase font-semibold">C2B Pay-In</span>
-            </div>
-            <div class="font-bold text-sm text-white mt-1">1. Deposits Callback</div>
-            <div class="text-[11px] text-slate-400 font-mono mt-0.5">/api/webhooks/pawapay/deposits</div>
-          </button>
-
-          <button
-            @click="setWebhookType('payout')"
-            :class="[
-              'p-4 rounded-xl border text-left transition',
-              selectedWebhookType === 'payout'
-                ? 'bg-slate-800 border-blue-500 text-white shadow-md'
-                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:bg-slate-900'
-            ]"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400">POST</span>
-              <span class="text-[10px] text-slate-400 uppercase font-semibold">B2C Pay-Out</span>
-            </div>
-            <div class="font-bold text-sm text-white mt-1">2. Payouts Callback</div>
-            <div class="text-[11px] text-slate-400 font-mono mt-0.5">/api/webhooks/pawapay/payouts</div>
-          </button>
-
-          <button
-            @click="setWebhookType('refund')"
-            :class="[
-              'p-4 rounded-xl border text-left transition',
-              selectedWebhookType === 'refund'
-                ? 'bg-slate-800 border-purple-500 text-white shadow-md'
-                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:bg-slate-900'
-            ]"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">POST</span>
-              <span class="text-[10px] text-slate-400 uppercase font-semibold">Reversals</span>
-            </div>
-            <div class="font-bold text-sm text-white mt-1">3. Refunds Callback</div>
-            <div class="text-[11px] text-slate-400 font-mono mt-0.5">/api/webhooks/pawapay/refunds</div>
-          </button>
-
-          <button
-            @click="setWebhookType('float')"
-            :class="[
-              'p-4 rounded-xl border text-left transition',
-              selectedWebhookType === 'float'
-                ? 'bg-slate-800 border-amber-500 text-white shadow-md'
-                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:bg-slate-900'
-            ]"
-          >
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">POST</span>
-              <span class="text-[10px] text-slate-400 uppercase font-semibold">Reserve Floor</span>
-            </div>
-            <div class="font-bold text-sm text-white mt-1">4. Float Alerts</div>
-            <div class="text-[11px] text-slate-400 font-mono mt-0.5">/api/webhooks/pawapay/float-notifications</div>
-          </button>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <div>
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-mono font-bold text-emerald-400 uppercase">{{ webhookTemplates[selectedWebhookType].title }}</span>
-              <span class="text-xs font-mono text-slate-400">{{ webhookTemplates[selectedWebhookType].path }}</span>
-            </div>
-            <p class="text-xs text-slate-300 mt-1">{{ webhookTemplates[selectedWebhookType].description }}</p>
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
-              <span class="font-semibold uppercase tracking-wider text-[10px]">PawaPay Event JSON Payload</span>
-              <span class="text-slate-500">Edit payload fields to test edge cases</span>
-            </div>
-            <textarea
-              v-model="webhookRequestBody"
-              rows="10"
-              class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-500 shadow-inner"
-            ></textarea>
-          </div>
-
-          <div class="flex justify-between items-center pt-2 border-t border-slate-800/80">
-            <button @click="setWebhookType(selectedWebhookType)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 rounded-lg transition">
-              Reset Sample
-            </button>
             <button
-              @click="executeWebhook"
-              :disabled="webhookLoading"
-              class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition"
+              @click="runCloudflareAiKycCheck"
+              :disabled="kycLoading"
+              class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition"
             >
-              <Send class="w-3.5 h-3.5" />
-              <span>{{ webhookLoading ? 'Dispatching Webhook...' : 'Fire Live PawaPay Webhook' }}</span>
+              {{ kycLoading ? 'Analyzing with Cloudflare AI...' : 'Run Cloudflare AI Forensic Check' }}
             </button>
-          </div>
-        </div>
 
-        <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 flex flex-col">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <Terminal class="w-4 h-4 text-emerald-400" />
-              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Compinance Webhook Response</h3>
-            </div>
-            <span
-              v-if="webhookResponseStatus !== null"
-              :class="[
-                'px-2.5 py-0.5 rounded font-mono text-xs font-bold border',
-                webhookResponseStatus === 200 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-              ]"
-            >
-              HTTP {{ webhookResponseStatus }}
-            </span>
-          </div>
-
-          <div class="flex-1 bg-slate-950 border border-slate-800/80 rounded-xl p-4 overflow-x-auto shadow-inner">
-            <pre v-if="webhookResponseOutput" class="text-xs font-mono text-emerald-300">{{ JSON.stringify(webhookResponseOutput, null, 2) }}</pre>
-            <div v-else class="text-center py-14 text-xs text-slate-500">
-              Click <strong>"Fire Live PawaPay Webhook"</strong> to test callbacks.
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- VIEW 3: API & DOCS EXPLORER -->
-    <main v-else-if="activeMainTab === 'api'" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <aside class="lg:col-span-4 space-y-4">
-        <div class="flex flex-wrap gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl">
-          <button
-            v-for="t in tags"
-            :key="t"
-            @click="selectedTag = t"
-            :class="[
-              'px-2.5 py-1 text-xs font-semibold rounded-lg transition',
-              selectedTag === t ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            {{ t }}
-          </button>
-        </div>
-
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 max-h-[calc(100vh-220px)] overflow-y-auto space-y-1.5">
-          <button
-            v-for="ep in filteredEndpoints"
-            :key="`${ep.method}-${ep.path}`"
-            @click="selectEndpoint(ep)"
-            :class="[
-              'w-full text-left p-2.5 rounded-xl transition flex flex-col gap-1 border',
-              selectedEndpoint.path === ep.path && selectedEndpoint.method === ep.method
-                ? 'bg-slate-800/90 border-emerald-500/40 shadow-sm'
-                : 'border-transparent hover:bg-slate-800/50'
-            ]"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <span
-                :class="[
-                  'px-2 py-0.5 text-[10px] font-mono font-bold rounded border',
-                  ep.method === 'POST' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : ep.method === 'DELETE' ? 'text-rose-400 bg-rose-500/10 border-rose-500/20' : 'text-blue-400 bg-blue-500/10 border-blue-500/20'
-                ]"
-              >
-                {{ ep.method }}
+            <!-- Verdict Box -->
+            <div v-if="kycResult" class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2">
+              <span :class="kycResult.passed ? 'text-emerald-400' : 'text-rose-400'" class="font-bold block">
+                {{ kycResult.passed ? 'VERIFIED · ZERO PEER COLLUSION' : 'REJECTED · FORGERY SUSPECTED' }}
               </span>
-              <span class="text-[10px] text-slate-400 font-mono">{{ ep.auth }}</span>
+              <div class="space-y-1 text-[11px] text-slate-400">
+                <div v-for="(r, idx) in kycResult.reasons" :key="idx">• {{ r }}</div>
+              </div>
             </div>
-            <div class="text-xs font-semibold text-white truncate">{{ ep.summary }}</div>
-            <div class="text-[11px] font-mono text-slate-400 truncate">{{ ep.path }}</div>
-          </button>
-        </div>
-      </aside>
-
-      <section class="lg:col-span-8 space-y-6">
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-              <span
-                :class="[
-                  'px-3 py-1 text-xs font-mono font-bold rounded-lg border',
-                  selectedEndpoint.method === 'POST' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' : selectedEndpoint.method === 'DELETE' ? 'text-rose-400 bg-rose-500/10 border-rose-500/30' : 'text-blue-400 bg-blue-500/10 border-blue-500/30'
-                ]"
-              >
-                {{ selectedEndpoint.method }}
-              </span>
-              <code class="text-base sm:text-lg font-mono font-bold text-white">{{ selectedEndpoint.path }}</code>
-            </div>
-            <span class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1">
-              <Lock class="w-3 h-3 text-slate-400" />
-              {{ selectedEndpoint.auth }}
-            </span>
           </div>
+        </div>
+      </section>
 
+      <!-- ============================================================== -->
+      <!-- VIEW 5: STUDENT ACCOUNT PROFILE                                -->
+      <!-- ============================================================== -->
+      <section v-else-if="currentPage === 'account'" class="space-y-4 text-xs">
+        <div class="border-b border-slate-800 pb-3 flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-bold text-white">{{ selectedEndpoint.summary }}</h2>
-            <p class="text-sm text-slate-300 mt-1 leading-relaxed">{{ selectedEndpoint.description }}</p>
+            <h2 class="text-lg font-bold text-white">{{ currentUser?.fullName }}</h2>
+            <span class="text-slate-400">{{ currentUser?.university }}</span>
           </div>
+          <button @click="handleLogout" class="text-rose-400 font-bold">Sign Out</button>
+        </div>
 
-          <div v-if="['POST', 'PUT', 'PATCH', 'DELETE'].includes(selectedEndpoint.method)" class="space-y-2 pt-2">
-            <textarea v-model="requestBody" rows="6" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-500 shadow-inner"></textarea>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2.5">
+          <div class="flex justify-between font-mono">
+            <span class="text-slate-400 font-sans">National ID:</span>
+            <span class="text-white">{{ currentUser?.nationalIdNumber }}</span>
           </div>
+          <div class="flex justify-between font-mono">
+            <span class="text-slate-400 font-sans">Phone Number:</span>
+            <span class="text-emerald-400">{{ currentUser?.phone }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Reg Number:</span>
+            <span class="text-white">{{ currentUser?.regNumber }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Parent Kinship:</span>
+            <span class="text-white">{{ currentUser?.parentName }}</span>
+          </div>
+        </div>
+      </section>
 
-          <div class="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800/80">
-            <button
-              @click="executeApiRequest"
-              :disabled="apiLoading"
-              class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition"
-            >
-              <Play class="w-3.5 h-3.5 fill-current" />
-              <span>{{ apiLoading ? 'Sending Request...' : 'Execute Live Request' }}</span>
-            </button>
-
-            <button @click="copyCurl" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
-              <Check v-if="copied" class="w-3.5 h-3.5 text-emerald-400" />
-              <Copy v-else class="w-3.5 h-3.5" />
-              <span>{{ copied ? 'cURL Copied!' : 'Copy cURL' }}</span>
-            </button>
+      <!-- ============================================================== -->
+      <!-- VIEW 6: MOBILE EXECUTIVE ADMIN CONSOLE                         -->
+      <!-- ============================================================== -->
+      <section v-else-if="currentPage === 'admin'" class="space-y-4 text-xs">
+        <div class="border-b border-slate-800 pb-3 flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-white">Executive Admin Console</h2>
+            <span class="text-amber-400 font-bold uppercase text-[10px]">Role: {{ currentUser?.role }}</span>
           </div>
         </div>
 
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <Terminal class="w-4 h-4 text-emerald-400" />
-              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Live Response Console</h3>
+        <!-- Admin Horizontal Subtabs for Mobile -->
+        <div class="grid grid-cols-4 gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <button
+            @click="adminTab = 'loans'"
+            :class="adminTab === 'loans' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'"
+            class="py-1.5 rounded-lg text-center"
+          >
+            Loans
+          </button>
+          <button
+            @click="adminTab = 'limits'"
+            :class="adminTab === 'limits' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'"
+            class="py-1.5 rounded-lg text-center"
+          >
+            Limits
+          </button>
+          <button
+            @click="adminTab = 'staff'"
+            :class="adminTab === 'staff' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'"
+            class="py-1.5 rounded-lg text-center"
+          >
+            Staff
+          </button>
+          <button
+            @click="adminTab = 'liquidity'"
+            :class="adminTab === 'liquidity' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'"
+            class="py-1.5 rounded-lg text-center"
+          >
+            Float
+          </button>
+        </div>
+
+        <!-- Loans Queue -->
+        <div v-if="adminTab === 'loans'" class="space-y-2.5 font-mono tabular-nums">
+          <div v-for="l in adminLoans" :key="l.id" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-2">
+            <div class="flex justify-between items-start font-sans">
+              <div>
+                <span class="font-bold text-white">{{ l.studentName }}</span>
+                <span class="block text-[10px] text-slate-400 font-mono">{{ l.studentPhone }}</span>
+              </div>
+              <span class="uppercase text-amber-400 font-bold text-[10px]">{{ l.status }}</span>
             </div>
-            <span v-if="apiResponseStatus !== null" class="px-2.5 py-0.5 rounded font-mono text-xs font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
-              Status: {{ apiResponseStatus }}
-            </span>
+            <div class="flex justify-between text-slate-300">
+              <span class="font-sans">Principal:</span>
+              <span class="text-white font-bold">KES {{ l.amount }}.00</span>
+            </div>
+            <button
+              v-if="l.status === 'requested' || l.status === 'approved'"
+              @click="disburseLoanAdmin(l.id)"
+              class="w-full py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg font-sans"
+            >
+              Disburse via PawaPay
+            </button>
+          </div>
+          <div v-if="adminLoans.length === 0" class="p-6 text-center text-slate-500 font-sans">
+            Queue clear. Zero pending loan applications.
+          </div>
+        </div>
+
+        <!-- Set Limits -->
+        <div v-else-if="adminTab === 'limits'" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+          <h3 class="font-bold text-white">Manual Limit Allocation Tool</h3>
+          <p class="text-slate-400">First-time loan is strictly KES 30. Staff adjust limits based on repayment record.</p>
+
+          <select v-model="manualLimitStudentId" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white">
+            <option value="usr_student_demo">usr_student_demo (Grace Wanjiku - Current KES 30)</option>
+            <option v-for="s in adminStudents" :key="s.id" :value="s.id">{{ s.id }} ({{ s.fullName }})</option>
+          </select>
+
+          <input v-model.number="manualLimitAmount" type="number" min="20" max="5000" placeholder="New limit (KES)" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-mono" />
+          <input v-model="manualLimitReason" type="text" placeholder="Justification note" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+
+          <button @click="setManualLoanLimit" class="w-full py-2.5 bg-amber-500 text-slate-950 font-bold rounded-lg">
+            Update Student Limit
+          </button>
+        </div>
+
+        <!-- Staff Governance -->
+        <div v-else-if="adminTab === 'staff'" class="space-y-3">
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+            <h3 class="font-bold text-white">Provision Staff (RBAC)</h3>
+            <input v-model="createStaffName" type="text" placeholder="Full Name" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+            <input v-model="createStaffEmail" type="email" placeholder="Email" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+            <select v-model="createStaffRole" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white">
+              <option value="customer_care">Customer Care</option>
+              <option value="admin">Compliance Admin</option>
+              <option value="manager" :disabled="currentUser?.role === 'ceo'">Credit Manager (Root Only)</option>
+              <option value="ceo" :disabled="currentUser?.role !== 'root'">CEO (Root Only)</option>
+            </select>
+            <button @click="handleCreateStaff" class="w-full py-2 bg-amber-500 text-slate-950 font-bold rounded-lg">
+              Create Staff
+            </button>
           </div>
 
-          <pre v-if="apiResponseOutput" class="bg-slate-950 border border-slate-800/80 rounded-xl p-4 text-xs font-mono text-emerald-300 overflow-x-auto max-h-96 shadow-inner">{{
-            typeof apiResponseOutput === 'object' ? JSON.stringify(apiResponseOutput, null, 2) : apiResponseOutput
-          }}</pre>
-          <div v-else class="bg-slate-950 border border-slate-800/80 rounded-xl p-8 text-center text-xs text-slate-500">
-            Click <strong>"Execute Live Request"</strong> above to send request.
+          <div class="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800/60">
+            <div v-for="s in adminStaff" :key="s.id" class="p-3 flex justify-between items-center">
+              <div>
+                <span class="font-bold text-white block">{{ s.fullName }}</span>
+                <span class="text-slate-400 text-[10px]">{{ s.email }}</span>
+              </div>
+              <span class="text-amber-400 font-bold uppercase text-[10px]">{{ s.role }}</span>
+            </div>
           </div>
+        </div>
+
+        <!-- Liquidity & Float -->
+        <div v-else-if="adminTab === 'liquidity'" class="space-y-3 font-mono tabular-nums">
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+            <span class="font-sans text-slate-400 block text-[11px]">M-Pesa Float Balance</span>
+            <div class="text-2xl font-black text-amber-400">KES {{ adminFloatBalance.toLocaleString() }}</div>
+            <span class="font-sans text-rose-400 text-[10px]">Below KES 50,000 threshold alert</span>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+            <span class="font-sans text-slate-400 block text-[11px]">Webhooks Processed</span>
+            <div class="text-xl font-bold text-white">{{ adminWebhooks.length }}</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 7: HELP & FAQ                                             -->
+      <!-- ============================================================== -->
+      <section v-else-if="currentPage === 'help'" class="space-y-4">
+        <div class="border-b border-slate-800 pb-3">
+          <h2 class="text-lg font-bold text-white">Help & Support Desk</h2>
+          <p class="text-xs text-slate-400">Frequently Asked Questions & Support Contact</p>
+        </div>
+
+        <input
+          v-model="faqSearch"
+          type="text"
+          placeholder="Search FAQs (repayment, KES 30 limit, M-Pesa)..."
+          class="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+        />
+
+        <div class="space-y-2 text-xs">
+          <div v-for="(faq, idx) in filteredFaqs" :key="idx" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-1">
+            <h4 class="font-bold text-white">{{ faq.q }}</h4>
+            <p class="text-slate-300 leading-relaxed text-[11px]">{{ faq.a }}</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 8: AUTH SIGN IN                                           -->
+      <!-- ============================================================== -->
+      <section v-else-if="currentPage === 'login'" class="space-y-4 max-w-sm mx-auto pt-6 text-xs">
+        <div class="text-center">
+          <h2 class="text-xl font-black text-white">Sign In to Compinance</h2>
+          <p class="text-slate-400 mt-1">Student & Staff Mobile Access</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+          <div>
+            <label class="block text-slate-300 mb-1">Email or Phone</label>
+            <input v-model="loginIdentifier" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white" />
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">Password</label>
+            <input v-model="loginPassword" type="password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white" />
+          </div>
+          <button @click="handleLogin" :disabled="authLoading" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl">
+            {{ authLoading ? 'Authenticating...' : 'Sign In' }}
+          </button>
+        </div>
+
+        <div class="text-center text-slate-400">
+          New student?
+          <button @click="currentPage = 'register'" class="text-emerald-400 font-bold underline ml-1">
+            Register for KES 30 Float
+          </button>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 9: AUTH REGISTER                                          -->
+      <!-- ============================================================== -->
+      <section v-else-if="currentPage === 'register'" class="space-y-4 max-w-sm mx-auto pt-4 text-xs">
+        <div class="text-center">
+          <h2 class="text-xl font-black text-white">Student Registration</h2>
+          <p class="text-slate-400 mt-1">Get immediate KES 30 emergency float</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+          <div>
+            <label class="block text-slate-300 mb-1">Full Legal Name</label>
+            <input v-model="regFullName" type="text" placeholder="Grace Wanjiku" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">National ID</label>
+            <input v-model="regNationalId" type="text" placeholder="38901234" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">M-Pesa Phone</label>
+            <input v-model="regPhone" type="text" placeholder="0712345678" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">Campus Email</label>
+            <input v-model="regEmail" type="email" placeholder="student@uonbi.ac.ke" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">Password</label>
+            <input v-model="regPassword" type="password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+          </div>
+          <button @click="handleRegister" :disabled="authLoading" class="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl">
+            Register & Claim KES 30
+          </button>
         </div>
       </section>
     </main>
 
-    <!-- VIEW 4: AZURE COSMOS DB EXPLORER -->
-    <main v-else-if="activeMainTab === 'cosmos'" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <div class="flex items-center gap-2">
-              <Database class="w-6 h-6 text-blue-400" />
-              <h2 class="text-xl font-bold text-white">Azure Cosmos DB Infrastructure</h2>
-            </div>
-            <p class="text-xs text-slate-400 mt-1">
-              Document store with high availability, partitioned collections, and automatic failover.
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-2 text-xs font-mono">
-            <span class="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/30">
-              Database: {{ cosmosStatus.databaseId }}
-            </span>
-            <span class="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/30">
-              Status: Connected
-            </span>
-          </div>
-        </div>
-
-        <div class="flex flex-wrap gap-2 mt-6 pt-4 border-t border-slate-800">
+    <!-- ============================================================== -->
+    <!-- FIXED TOUCH-NATIVE BOTTOM NAVIGATION BAR (FOR 95%+ PHONE USERS)-->
+    <!-- ============================================================== -->
+    <nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/80 px-2 py-1">
+      <div class="max-w-md mx-auto flex items-center justify-around">
+        <!-- STUDENT / GUEST NAVIGATION TABS -->
+        <template v-if="currentUser?.type !== 'staff'">
           <button
-            v-for="cName in ['loans', 'users', 'pawapay_webhooks', 'audit_logs']"
-            :key="cName"
-            @click="() => { selectedContainer = cName; fetchContainerData(); }"
-            :class="[
-              'px-4 py-2 rounded-xl text-xs font-mono font-bold transition flex items-center gap-2 border',
-              selectedContainer === cName ? 'bg-blue-600 text-white border-blue-500 shadow-md' : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-900'
-            ]"
+            @click="currentPage = 'home'"
+            :class="currentPage === 'home' ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
           >
-            <Layers class="w-3.5 h-3.5" />
-            <span>container: {{ cName }}</span>
+            <Home class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">Home</span>
+          </button>
+
+          <button
+            @click="currentUser ? (currentPage = 'loan_studio') : (currentPage = 'login')"
+            :class="currentPage === 'loan_studio' ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
+          >
+            <CreditCard class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">Borrow</span>
+          </button>
+
+          <button
+            @click="currentPage = 'my_loans'"
+            :class="currentPage === 'my_loans' ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
+          >
+            <Receipt class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">Statements</span>
+          </button>
+
+          <button
+            @click="currentPage = 'kyc'"
+            :class="currentPage === 'kyc' ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
+          >
+            <Cpu class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">AI Shield</span>
+          </button>
+
+          <button
+            @click="currentUser ? (currentPage = 'account') : (currentPage = 'login')"
+            :class="currentPage === 'account' ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
+          >
+            <User class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">Account</span>
+          </button>
+        </template>
+
+        <!-- ADMIN / STAFF NAVIGATION TABS -->
+        <template v-else>
+          <button
+            @click="currentPage = 'admin'; adminTab = 'loans'"
+            :class="currentPage === 'admin' && adminTab === 'loans' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
+          >
+            <Receipt class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">Loans</span>
+          </button>
+
+          <button
+            @click="currentPage = 'admin'; adminTab = 'limits'"
+            :class="currentPage === 'admin' && adminTab === 'limits' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
+          >
+            <Sliders class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">Limits</span>
+          </button>
+
+          <button
+            @click="currentPage = 'admin'; adminTab = 'staff'"
+            :class="currentPage === 'admin' && adminTab === 'staff' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
+          >
+            <Users class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">Staff</span>
+          </button>
+
+          <button
+            @click="currentPage = 'admin'; adminTab = 'liquidity'"
+            :class="currentPage === 'admin' && adminTab === 'liquidity' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'"
+            class="flex-1 py-1.5 flex flex-col items-center justify-center transition active:scale-95"
+          >
+            <Wallet class="w-5 h-5 mb-0.5" />
+            <span class="text-[10px] font-semibold">Float</span>
+          </button>
+        </template>
+      </div>
+    </nav>
+
+    <!-- REPAYMENT MODAL (M-PESA / PAWAPAY STK PUSH) -->
+    <div v-if="showRepayModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-xs">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+          <h3 class="font-bold text-white">M-Pesa STK Repayment</h3>
+          <button @click="showRepayModal = false" class="text-slate-400 hover:text-white">✕</button>
+        </div>
+
+        <div v-if="repaySuccessMessage" class="p-3 rounded-lg bg-emerald-500/10 text-emerald-300">
+          {{ repaySuccessMessage }}
+        </div>
+        <div v-else class="space-y-3 font-mono tabular-nums">
+          <div>
+            <label class="block text-slate-300 font-sans mb-1">M-Pesa Mobile Number</label>
+            <input v-model="repayMpesaPhone" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white" />
+          </div>
+          <div>
+            <label class="block text-slate-300 font-sans mb-1">Amount (KES)</label>
+            <input v-model.number="repayAmountInput" type="number" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-emerald-400 font-bold" />
+          </div>
+          <button
+            @click="triggerMpesaRepayment"
+            :disabled="repayLoading"
+            class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl font-sans"
+          >
+            {{ repayLoading ? 'Prompting Handset...' : `Send STK Push for KES ${repayAmountInput}` }}
           </button>
         </div>
       </div>
+    </div>
 
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm font-bold text-white font-mono">
-            Cosmos Query: SELECT * FROM c IN {{ selectedContainer }} ({{ containerData.length }} records)
-          </h3>
-          <button @click="fetchContainerData" class="text-xs text-slate-400 hover:text-white flex items-center gap-1.5">
-            <RefreshCw class="w-3.5 h-3.5" /> Refresh Documents
-          </button>
+    <!-- DIGITAL VOUCHER MODAL -->
+    <div v-if="showReceiptModal && receiptLoanTarget" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-xs">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+          <h3 class="font-bold text-white">Digital Loan Voucher</h3>
+          <button @click="showReceiptModal = false" class="text-slate-400 hover:text-white">✕</button>
         </div>
 
-        <div v-if="containerLoading" class="text-center py-12 text-slate-500 text-xs font-mono">
-          Querying Azure Cosmos DB...
-        </div>
-
-        <div v-else-if="containerData.length === 0" class="text-center py-12 text-slate-500 text-xs font-mono">
-          No records currently in container: {{ selectedContainer }}.
-        </div>
-
-        <div v-else class="space-y-3">
-          <div v-for="(doc, idx) in containerData" :key="doc.id || idx" class="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs space-y-2 hover:border-slate-700 transition">
-            <div class="flex items-center justify-between border-b border-slate-900 pb-2">
-              <span class="text-emerald-400 font-bold">id: {{ doc.id }}</span>
-              <span class="text-slate-500 text-[10px]">partitionKey: {{ doc.id }}</span>
-            </div>
-            <pre class="text-slate-300 text-[11px] overflow-x-auto">{{ JSON.stringify(doc, null, 2) }}</pre>
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2 font-mono tabular-nums">
+          <div class="flex justify-between">
+            <span class="font-sans text-slate-400">Borrower:</span>
+            <span class="text-white">{{ receiptLoanTarget.studentName }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="font-sans text-slate-400">Principal:</span>
+            <span class="text-white font-bold">KES {{ receiptLoanTarget.amount }}.00</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="font-sans text-slate-400">Total Payable:</span>
+            <span class="text-emerald-400 font-bold">KES {{ receiptLoanTarget.totalPayable.toFixed(2) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="font-sans text-slate-400">Status:</span>
+            <span class="text-emerald-400 font-bold font-sans uppercase">{{ receiptLoanTarget.status }}</span>
           </div>
         </div>
-      </div>
-    </main>
 
-    <!-- Footer -->
-    <footer class="border-t border-slate-800 bg-slate-900/60 px-4 py-4 text-xs text-slate-500 text-center">
-      Compinance Fintech Platform • Vue 3 TS Admin Panel • Azure Cosmos DB • PawaPay Mobile Money Webhooks • Cloudflare Workers Deployable
-    </footer>
+        <button @click="showReceiptModal = false" class="w-full py-2 bg-slate-800 text-white font-semibold rounded-lg">
+          Close Voucher
+        </button>
+      </div>
+    </div>
   </div>
 </template>

@@ -1,6 +1,6 @@
 {
   "name": "Compinance",
-  "description": "Enterprise Student Loaning Backend & Mobile Money Platform powered by PawaPay, Gemini AI KYC Verification, and Azure Cosmos DB.",
+  "description": "Enterprise Student Loaning & Mobile Money Platform powered by PawaPay and Automated AI KYC Verification.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

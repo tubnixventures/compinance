@@ -3,7 +3,7 @@ import { VerifyAccountBody } from './schema';
 import { validateRequiredFields } from '../../../helpers/validation';
 import { normalizeKenyaPhone } from '../../../utils/phone';
 import { r2Connector } from '../../../connectors/r2';
-import { analyzeDocumentsWithGemini } from '../../../connectors/gemini';
+import { analyzeDocumentsWithCloudflareAI } from '../../../connectors/cloudflare-ai';
 import { nativeFirestore } from '../../../connectors/firestore';
 import { User } from '../../../schema/user';
 import { VerificationRecord, KycDocuments } from '../../../schema/verification';
@@ -46,7 +46,7 @@ export async function handleVerifyAccount(c: Context) {
     birthCertificateUrl: birthCert.url, passportPhotoUrl: passPhoto.url, fullPhotoUrl: fullPhoto.url,
   };
 
-  const geminiResult = await analyzeDocumentsWithGemini(user.fullName, documents);
+  const geminiResult = await analyzeDocumentsWithCloudflareAI(user.fullName, documents, (c.env as any)?.AI);
   const detectedNatId = body.nationalIdNumber?.trim() || geminiResult.extractedNationalIdNumber?.trim();
   const detectedParId = body.parentIdNumber?.trim() || geminiResult.extractedParentIdNumber?.trim();
 

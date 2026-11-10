@@ -62,8 +62,8 @@ app.get('/doc/spec', handleGetDocsSpec);
 app.get('/docs', handleGetDocsHtml);
 app.get('/docs/spec', handleGetDocsSpec);
 app.get('/api/docs/spec', handleGetDocsSpec);
-app.get('/health', (c) => c.json({ status: 'UP', service: 'Compinance Core Backend', database: 'Azure Cosmos DB', timestamp: Date.now() }));
-app.get('/api/system/cosmos-status', (c) => c.json({ success: true, cosmos: cosmosService.getStatus() }));
+app.get('/health', (c) => c.json({ status: 'UP', service: 'Compinance Secure Banking Engine', timestamp: Date.now() }));
+app.get('/api/system/core-status', (c) => c.json({ success: true, status: 'OPERATIONAL' }));
 
 // Auth Routes (Rate Limited)
 app.use('/api/auth/*', authRateLimiter);
